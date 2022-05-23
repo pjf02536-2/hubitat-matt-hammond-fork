@@ -368,8 +368,13 @@ def cmdSwitch(String childDni, onOff) {
     onOff = onOff ? "1" : "0"
     
     if (isTS0601()) {
-        log.warn "cmdSwitch NOT implemented for TS0601!"
-        return null
+        //ArrayList<String> cmds = []
+        //def dpType    = DP_TYPE_BOOL
+        def dpValHex  = zigbee.convertToHexString(onOff as int, 2) 
+        def cmd = childDni[-2..-1]
+        def dpCommand = cmd == "01" ? "01" : cmd == "02" ? "07" : cmd == "03" ? "0F" : null
+        //log.warn "${device.displayName}  sending cmdSwitch command=${dpCommand} value=${onOff} ($dpValHex)"
+        return sendTuyaCommand(dpCommand, DP_TYPE_BOOL, dpValHex)       
     }
     return [
         "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 ${onOff} {}"
@@ -589,6 +594,26 @@ private int getAttributeValue(ArrayList _data) {
     return retValue
 }
 
+private sendTuyaCommand(int dp, int dpType, int fnCmd, int fnCmdLength) {
+	atomicState.waitingForResponseSinceMillis = now()
+	checkForResponse()
+    
+	def dpHex = zigbee.convertToHexString(dp, 2)
+	def dpTypeHex = zigbee.convertToHexString(dpType, 2)
+	def fnCmdHex = zigbee.convertToHexString(fnCmd, fnCmdLength)
+	log.trace("sendTuyaCommand: dp=0x${dpHex}, dpType=0x${dpTypeHex}, fnCmd=0x${fnCmdHex}, fnCmdLength=${fnCmdLength}")
+	def message = (randomPacketId().toString()
+				   + dpHex
+				   + dpTypeHex
+				   + zigbee.convertToHexString((fnCmdLength / 2) as int, 4)
+				   + fnCmdHex)
+	logTrace("sendTuyaCommand: message=${message}")
+	zigbee.command(CLUSTER_TUYA, ZIGBEE_COMMAND_SET_DATA, message)
+}
+
+private randomPacketId() {
+	return zigbee.convertToHexString(new Random().nextInt(65536), 4)
+}
 
 /*
 -----------------------------------------------------------------------------
@@ -733,3 +758,66 @@ def intTo16bitUnsignedHex(value) {
 def intTo8bitUnsignedHex(value) {
     return zigbee.convertToHexString(value.toInteger(), 2)
 }
+//////////////////////////////////////////////////////////////////////////////
+
+private getCLUSTER_TUYA()       { 0xEF00 }
+private getSETDATA()            { 0x00 }
+private getSETTIME()            { 0x24 }
+
+// Tuya Commands
+private getTUYA_REQUEST()       { 0x00 }
+private getTUYA_REPORTING()     { 0x01 }
+private getTUYA_QUERY()         { 0x02 }
+private getTUYA_STATUS_SEARCH() { 0x06 }
+private getTUYA_TIME_SYNCHRONISATION() { 0x24 }
+
+// tuya DP type
+private getDP_TYPE_RAW()        { "01" }    // [ bytes ]
+private getDP_TYPE_BOOL()       { "01" }    // [ 0/1 ]
+private getDP_TYPE_VALUE()      { "02" }    // [ 4 byte value ]
+private getDP_TYPE_STRING()     { "03" }    // [ N byte string ]
+private getDP_TYPE_ENUM()       { "04" }    // [ 0-255 ]
+private getDP_TYPE_BITMAP()     { "05" }    // [ 1,2,4 bytes ] as bits
+
+
+private sendTuyaCommand(dp, dp_type, fncmd) {
+    ArrayList<String> cmds = []
+    cmds += zigbee.command(CLUSTER_TUYA, SETDATA, PACKET_ID + dp + dp_type + zigbee.convertToHexString((int)(fncmd.length()/2), 4) + fncmd )
+    if (settings?.logEnable) log.trace "${device.displayName} sendTuyaCommand = ${cmds}"
+    //if (state.txCounter != null) state.txCounter = state.txCounter + 1
+    return cmds
+}
+
+private getPACKET_ID() {
+    /*
+    state.packetID = ((state.packetID ?: 0) + 1 ) % 65536
+    return zigbee.convertToHexString(state.packetID, 4)
+    */
+    return randomPacketId()
+}
+
+
+void sendZigbeeCommands(ArrayList<String> cmd) {
+    if (settings?.logEnable) {log.trace "${device.displayName} sendZigbeeCommands(cmd=$cmd)"}
+    hubitat.device.HubMultiAction allActions = new hubitat.device.HubMultiAction()
+    cmd.each {
+            allActions.add(new hubitat.device.HubAction(it, hubitat.device.Protocol.ZIGBEE))
+            //if (state.txCounter != null) state.txCounter = state.txCounter + 1
+    }
+    sendHubCommand(allActions)
+}
+
+
+
+def zTest( dpCommand, dpValue, dpTypeString ) {
+    ArrayList<String> cmds = []
+    def dpType   = dpTypeString=="DP_TYPE_VALUE" ? DP_TYPE_VALUE : dpTypeString=="DP_TYPE_BOOL" ? DP_TYPE_BOOL : dpTypeString=="DP_TYPE_ENUM" ? DP_TYPE_ENUM : null
+    def dpValHex = dpTypeString=="DP_TYPE_VALUE" ? zigbee.convertToHexString(dpValue as int, 8) : dpValue
+
+    log.warn "${device.displayName}  sending TEST command=${dpCommand} value=${dpValue} ($dpValHex) type=${dpType}"
+
+    sendZigbeeCommands( sendTuyaCommand(dpCommand, dpType, dpValHex) )
+}    
+
+
+
