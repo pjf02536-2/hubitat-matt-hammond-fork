@@ -40,43 +40,24 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -----------------------------------------------------------------------------
 ver 0.2.0 11/12/2021 Matt Hammond - added _TZ3000_7ysdnebc
 ver 0.2.1 12/29/2021 kkossev      - added cluster 0003 to the fingerprint, model _TZ3000_7ysdnebc
-ver 0.2.2 05/22/2022 kkossev      - moved model and inClusters to modelConfigs, added _TZE200_vm1gyrso
+ver 0.2.2 05/23/2022 kkossev      - moved model and inClusters to modelConfigs, added _TZE200_vm1gyrso 3-Gang Dimmer module
 
 */
 
 import groovy.transform.Field
 
 @Field static def modelConfigs = [
-    "_TYZB01_v8gtiaed": [
-        numEps: 2,
-        model: "TS110F",
-        inClusters: "0000,0004,0005,0006,0008",
-        joinName: "Tuya Zigbee 2-Gang Dimmer module"
-    ],
-    "_TYZB01_qezuin6k": [
-        numEps: 1,
-        model: "TS110F",
-        inClusters: "0000,0004,0005,0006,0008",
-        joinName: "Tuya Zigbee 1-Gang Dimmer module"
-    ],
-    "_TZ3000_92chsky7": [
-        numEps: 2,
-        model: "TS110F",
-        inClusters: "0000,0004,0005,0006,0008",
-        joinName: "Tuya Zigbee 2-Gang Dimmer module (no-neutral)"
-    ],
-    "_TZ3000_7ysdnebc": [
-        numEps: 2,
-        model: "TS110F",
-        inClusters: "0000,0004,0005,0003,0006,0008",
-        joinName: "Tuya 2CH Zigbee dimmer module"
-    ],
-    "_TZE200_vm1gyrso": [
-        numEps: 3,
-        model: "TS0601",
-        inClusters: "0004,0005,EF00,0000",
-        joinName: "Tuya Zigbee 3-Gang Dimmer module"
-    ]    
+    "_TYZB01_v8gtiaed": [ numEps: 2, model: "TS110F", inClusters: "0000,0004,0005,0006,0008", joinName: "Tuya Zigbee 2-Gang Dimmer module" ],                // '2 gang smart dimmer switch module with neutral'
+    "_TYZB01_qezuin6k": [ numEps: 1, model: "TS110F", inClusters: "0000,0004,0005,0006,0008", joinName: "Tuya Zigbee 1-Gang Dimmer module" ],                // '1 gang smart dimmer switch module with neutral'
+    "_TZ3000_ktuoyvt5": [ numEps: 1, model: "TS110F", inClusters: "0000,0004,0005,0006,0008", joinName: "Tuya Zigbee 1-Gang Switch module" ],                // '1 gang smart        switch module without neutral'
+    "_TZ3000_92chsky7": [ numEps: 2, model: "TS110F", inClusters: "0000,0004,0005,0006,0008", joinName: "Tuya Zigbee 2-Gang Dimmer module (no-neutral)" ],   // '2 gang smart dimmer switch module without neutral'
+    "_TZ3000_7ysdnebc": [ numEps: 2, model: "TS110F", inClusters: "0000,0004,0005,0003,0006,0008", joinName: "Tuya 2CH Zigbee dimmer module" ],
+    "_TZE200_vm1gyrso": [ numEps: 3, model: "TS0601", inClusters: "0004,0005,EF00,0000",      joinName: "Tuya Zigbee 3-Gang Dimmer module" ],    
+    "_TZE200_whpb9yts": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",      joinName: "Tuya Zigbee 1-Gang Dimmer module" ],                // 'Zigbee smart dimmer'
+    "_TZE200_ebwgzdqq": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",      joinName: "Tuya Zigbee 1-Gang Dimmer module" ],    
+    "_TZE200_9i9dt8is": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",      joinName: "Tuya Zigbee 1-Gang Dimmer module" ],    
+    "_TZE200_dfxkcots": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",      joinName: "Tuya Zigbee 1-Gang Dimmer module" ],    
+    "gq8b1uv":          [ numEps: 1, model: "gq8b1uv", inClusters: "0000,0004,0005,0006,0008",joinName: "Tuya Zigbee 1-Gang Dimmer module" ]                 //  TUYATEC Zigbee smart dimmer
 ]
     
 def config() {
@@ -85,11 +66,11 @@ def config() {
 
 def isTS0601() {
     if (isParent()) {
-        log.trace "model = ${device.getDataValue('model')}"
+        //log.trace "model = ${device.getDataValue('model')}"
         return device.getDataValue('model') == "TS0601"
     }
     else {
-        log.trace "model = ${parent?.device.getDataValue('model')}"
+        //log.trace "model = ${parent?.device.getDataValue('model')}"
         return parent?.device.getDataValue('model') == "TS0601"    
     }
 }
@@ -358,6 +339,10 @@ Hub Action (cmd) generators
 
 def cmdRefresh(String childDni) {
     def endpointId = childDniToEndpointId(childDni)
+    if (isTS0601()) {
+        log.warn "cmdRefresh NOT implemented for TS0601!"
+        return null
+    }
     return [
         "he rattr 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 0 {}",
         "delay 100",
@@ -485,6 +470,9 @@ def parse(String description) {
                     onSwitchLevel(value)
                 }
                 break
+            default :
+                log.warn "UNPROCESSED endpoint=${descMap?.endpoint} cluster=${descMap?.cluster} command=${descMap?.command} attrInt = ${descMap?.attrInt} value= ${descMap?.value} data=${descMap?.data}"
+                break
         }
     } else {
         throw new Exception("parse() called incorrectly by child")
@@ -508,37 +496,34 @@ def parseTuyaCluster( descMap ) {
     def cmd = descMap.data[2]
     def value = getAttributeValue(descMap.data)
     switch (cmd) {
-        case "01" :
-            log.info "Switch1 is ${value==0 ? "off" : "on"}"
-            def child = getChildByEndpointId("01")
-            def isFirst = 0 == endpointIdToIndex("01")
-            child.onSwitchState(value)
-            if (isFirst && child != this) {
-                logDebug "Replicating switchState in parent"
-                onSwitchState(value)
-            } else {
-                logDebug "${isFirst} ${this} ${child} ${value}"
-            }
+        case "01" : // Switch1
+        case "07" : // Switch2
+        case "0F" : // Switch3
+            handleTuyaClusterSwitchCmd(cmd, value)
             break
-        case "02" : // switch level state
-            log.info "Brightness1 is ${value/10 as int}"
-            def child = getChildByEndpointId("01")
-            child.onSwitchLevel(value/10 as int)
-            if (isFirst && child != this) {
-                logDebug "Replicating switchLevel in parent"
-                onSwitchLevel(value)
-            }
+        case "02" : // Brightness1 (switch level state)
+        case "08" : // Brightness2
+        case "10" : // Brightness3
+            handleTuyaClusterBrightnessCmd(cmd, value/10 as int)
             break        
-        case "03" :
-            log.info "Minimum brightness1 is ${value/10 as int}"
+        case "03" : // Minimum brightness1
+        case "09" : // Minimum brightness2
+        case "11" : // Minimum brightness3
+            def switchNumber = cmd == "03" ? "01" : cmd == "09" ? "02" : cmd == "11" ? "03" : null
+            log.info "Minimum brightness ${switchNumber} is ${value/10 as int}"
             break
-        case "05" :
-            log.info "Maximum brightness1 is ${value/10 as int}"
+        case "05" : // Maximum brightness1
+        case "0B" : // Maximum brightness1
+        case "13" : // Maximum brightness1
+            def switchNumber = cmd == "05" ? "01" : cmd == "0B" ? "02" : cmd == "13" ? "03" : null
+            log.info "Maximum brightness ${switchNumber} is ${value/10 as int}"
             break
-        case "05" :
-            log.info "Countdown1 is ${value}s"
+        case "06" : // Countdown1
+        case "0C" : // Countdown2
+        case "14" : // Countdown3
+            def switchNumber = cmd == "06" ? "01" : cmd == "0C" ? "02" : cmd == "14" ? "03" : null
+            log.info "Countdown ${switchNumber} is ${value}s"
             break
-        
         case "OE" : //14
             log.info "Power-on Status Setting is ${value}"
             break
@@ -548,13 +533,43 @@ def parseTuyaCluster( descMap ) {
         case "1A" : //26
             log.info "Switch backlight ${value}"
             break
-        
-        
         default :
             log.warn "UNHANDLED Tuya cmd=${cmd} value=${value}"
             break
     }
 }
+
+def handleTuyaClusterSwitchCmd(cmd,value) {
+    def switchNumber = cmd == "01" ? "01" : cmd == "07" ? "02" : cmd == "0F" ? "03" : null
+    log.info "Switch ${switchNumber} is ${value==0 ? "off" : "on"}"
+    def child = getChildByEndpointId(switchNumber)
+    def isFirst = 0 == endpointIdToIndex(switchNumber)
+    child.onSwitchState(value)
+    if (isFirst && child != this) {
+        logDebug "Replicating switchState in parent"
+        onSwitchState(value)
+    }
+    else {
+       // logDebug "${isFirst} ${this} ${child} ${value}"
+    }
+}
+
+def handleTuyaClusterBrightnessCmd(cmd, value) {
+    def switchNumber = cmd == "02" ? "01" : cmd == "08" ? "02" : cmd == "10" ? "03" : null
+    log.info "Brightness ${switchNumber} is ${value}%"
+    def child = getChildByEndpointId(switchNumber)
+    def isFirst = 0 == endpointIdToIndex(switchNumber)
+    child.onSwitchLevel(value)
+    if (isFirst && child != this) {
+        logDebug "Replicating switchLevel in parent"
+        onSwitchLevel(value)
+    }
+    else {
+       // logDebug "${isFirst} ${this} ${child} ${value}"
+    }
+}
+    
+
 
 private int getAttributeValue(ArrayList _data) {
     int retValue = 0
