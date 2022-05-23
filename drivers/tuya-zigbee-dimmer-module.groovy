@@ -38,6 +38,10 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -----------------------------------------------------------------------------
+ver 0.2.0 11/12/2021 Matt Hammond - added _TZ3000_7ysdnebc
+ver 0.2.1 12/29/2021 kkossev      - added cluster 0003 to the fingerprint, model _TZ3000_7ysdnebc
+ver 0.2.2 05/22/2022 kkossev      - moved model and inClusters to modelConfigs, added _TZE200_vm1gyrso
+
 */
 
 import groovy.transform.Field
@@ -45,21 +49,51 @@ import groovy.transform.Field
 @Field static def modelConfigs = [
     "_TYZB01_v8gtiaed": [
         numEps: 2,
+        model: "TS110F",
+        inClusters: "0000,0004,0005,0006,0008",
         joinName: "Tuya Zigbee 2-Gang Dimmer module"
     ],
     "_TYZB01_qezuin6k": [
         numEps: 1,
+        model: "TS110F",
+        inClusters: "0000,0004,0005,0006,0008",
         joinName: "Tuya Zigbee 1-Gang Dimmer module"
     ],
     "_TZ3000_92chsky7": [
         numEps: 2,
+        model: "TS110F",
+        inClusters: "0000,0004,0005,0006,0008",
         joinName: "Tuya Zigbee 2-Gang Dimmer module (no-neutral)"
-    ]
+    ],
+    "_TZ3000_7ysdnebc": [
+        numEps: 2,
+        model: "TS110F",
+        inClusters: "0000,0004,0005,0003,0006,0008",
+        joinName: "Tuya 2CH Zigbee dimmer module"
+    ],
+    "_TZE200_vm1gyrso": [
+        numEps: 3,
+        model: "TS0601",
+        inClusters: "0004,0005,EF00,0000",
+        joinName: "Tuya Zigbee 3-Gang Dimmer module"
+    ]    
 ]
     
 def config() {
     return modelConfigs[device.getDataValue("manufacturer")]
 }
+
+def isTS0601() {
+    if (isParent()) {
+        log.trace "model = ${device.getDataValue('model')}"
+        return device.getDataValue('model') == "TS0601"
+    }
+    else {
+        log.trace "model = ${parent?.device.getDataValue('model')}"
+        return parent?.device.getDataValue('model') == "TS0601"    
+    }
+}
+
 
 metadata {
     definition (
@@ -80,13 +114,12 @@ metadata {
         
         modelConfigs.each{ data ->
             fingerprint profileId: "0104",
-                inClusters: "0000,0004,0005,0006,0008",
+                inClusters: data.value.inClusters,
                 outClusters:"0019,000A",
-                model:"TS110F",
+                model: data.value.model,
                 manufacturer: data.key,
                 deviceJoinName: data.value.joinName
         }
-        
     }
     
     preferences {
@@ -136,7 +169,6 @@ def logInfo(msg) {
 }
 
 
-
 /*
 -----------------------------------------------------------------------------
 Standard handlers
@@ -172,10 +204,15 @@ def initialized() {
     
     if (isParent()) {
         createChildDevices()   
+        if (device.getDataValue("model") == "TS0601") {
+            log.warn "tuyaBlackMagic()"
+            cmds += tuyaBlackMagic()
+        }
         cmds += listenChildDevices()
     }
     return cmds
 }
+
 
 /*
 -----------------------------------------------------------------------------
@@ -223,6 +260,9 @@ def createChildDevices() {
 
 def listenChildDevices() {
     def cmds = []
+    if (isTS0601()) {
+        return null
+    }
     getChildEndpointIds().each{ endpointId ->
         cmds += [
             //bindings
@@ -328,6 +368,10 @@ def cmdRefresh(String childDni) {
     
 def cmdSwitchToggle(String childDni) {
     def endpointId = childDniToEndpointId(childDni)
+    if (isTS0601()) {
+        log.warn "cmdSwitchToggle NOT implemented for TS0601!"
+        return null
+    }
     return [
         "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 2 {}",
         "delay 500"
@@ -337,7 +381,11 @@ def cmdSwitchToggle(String childDni) {
 def cmdSwitch(String childDni, onOff) {
     def endpointId = childDniToEndpointId(childDni)
     onOff = onOff ? "1" : "0"
-
+    
+    if (isTS0601()) {
+        log.warn "cmdSwitch NOT implemented for TS0601!"
+        return null
+    }
     return [
         "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 ${onOff} {}"
     ]
@@ -352,6 +400,11 @@ def cmdSetLevel(String childDni, value, duration) {
     duration = (duration * 10).toInteger()
     def child = getChildByEndpointId(endpointId)
         
+    if (isTS0601()) {
+        log.warn "cmdSetLevel NOT implemented for TS0601!"
+        return null
+    }
+    
     def cmd = [
         "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 4 { 0x${intTo8bitUnsignedHex(value)} 0x${intTo16bitUnsignedHex(duration)} }",
     ]
@@ -392,11 +445,26 @@ def parse(String description) {
 
     if (isParent()) {
         def descMap = zigbee.parseDescriptionAsMap(description)
-      logDebug "Received parsed: ${descMap}"
+        logDebug "Received parsed: ${descMap}"
 
-        if (description.startsWith("catchall")) return
-    
-        def value = Integer.parseInt(descMap.value, 16)
+        if (description.startsWith("catchall")) {
+            log.trace "catchall clusterId=${descMap?.clusterId} command=${descMap?.command} data=${descMap?.data}"
+            if (descMap?.clusterId == "EF00") {
+                return parseTuyaCluster(descMap)
+            }
+            else {
+                log.warn "Ignored non-Tuya cluster catchall clusterId=${descMap?.clusterId} command=${descMap?.command} data=${descMap?.data}"
+                return null
+            }
+        }
+        //
+        try {
+            def value = Integer.parseInt(descMap.value, 16)
+        }
+        catch (e) {
+            log.warn "exception caught while parsing description:  ${description}"
+            value = 0
+        }
         def child = getChildByEndpointId(descMap.endpoint)
         def isFirst = 0 == endpointIdToIndex(descMap.endpoint)
             
@@ -425,18 +493,102 @@ def parse(String description) {
 
 /*
 -----------------------------------------------------------------------------
+Tuya cluster EF00 specific code
+-----------------------------------------------------------------------------
+*/
+
+def tuyaBlackMagic() {
+    return zigbee.readAttribute(0x0000, [0x0004, 0x000, 0x0001, 0x0005, 0x0007, 0xfffe], [:], delay=200)
+}
+
+def parseTuyaCluster( descMap ) {
+    if (descMap.clusterId != "EF00") {
+        return null
+    }
+    def cmd = descMap.data[2]
+    def value = getAttributeValue(descMap.data)
+    switch (cmd) {
+        case "01" :
+            log.info "Switch1 is ${value==0 ? "off" : "on"}"
+            def child = getChildByEndpointId("01")
+            def isFirst = 0 == endpointIdToIndex("01")
+            child.onSwitchState(value)
+            if (isFirst && child != this) {
+                logDebug "Replicating switchState in parent"
+                onSwitchState(value)
+            } else {
+                logDebug "${isFirst} ${this} ${child} ${value}"
+            }
+            break
+        case "02" : // switch level state
+            log.info "Brightness1 is ${value/10 as int}"
+            def child = getChildByEndpointId("01")
+            child.onSwitchLevel(value/10 as int)
+            if (isFirst && child != this) {
+                logDebug "Replicating switchLevel in parent"
+                onSwitchLevel(value)
+            }
+            break        
+        case "03" :
+            log.info "Minimum brightness1 is ${value/10 as int}"
+            break
+        case "05" :
+            log.info "Maximum brightness1 is ${value/10 as int}"
+            break
+        case "05" :
+            log.info "Countdown1 is ${value}s"
+            break
+        
+        case "OE" : //14
+            log.info "Power-on Status Setting is ${value}"
+            break
+        case "15" : //21
+            log.info "Light Mode is ${value}"
+            break
+        case "1A" : //26
+            log.info "Switch backlight ${value}"
+            break
+        
+        
+        default :
+            log.warn "UNHANDLED Tuya cmd=${cmd} value=${value}"
+            break
+    }
+}
+
+private int getAttributeValue(ArrayList _data) {
+    int retValue = 0
+    try {    
+        if (_data.size() >= 6) {
+            int dataLength = zigbee.convertHexToInt(_data[5]) as Integer
+            int power = 1;
+            for (i in dataLength..1) {
+                retValue = retValue + power * zigbee.convertHexToInt(_data[i+5])
+                power = power * 256
+            }
+        }
+    }
+    catch ( e ) {
+        log.error "Exception caught : data = ${_data}"
+    }
+    return retValue
+}
+
+
+/*
+-----------------------------------------------------------------------------
 Child only code
 -----------------------------------------------------------------------------
 */
 
 def onSwitchState(value) {
-    def valueText = value==1?"on":"off"
+    def valueText = value==1 ? "on":"off"
     sendEvent(name:"switch", value: valueText, descriptionText:"${device.displayName} set ${valueText}", unit: null)
 }
 
 def onSwitchLevel(value) {
     logDebug "onSwitchLevel: value=${value}"
-    def level = valueToLevel(value.toInteger())
+    def level = isTS0601() ?  value : valueToLevel(value.toInteger())
     logDebug "onSwitchLevel: Value=${value} level=${level}"
     
     sendEvent(name:"level", value: level, descriptionText:"${device.displayName} set ${level}%", unit: "%")
