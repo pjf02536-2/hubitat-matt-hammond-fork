@@ -40,24 +40,32 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -----------------------------------------------------------------------------
 ver 0.2.0 11/12/2021 Matt Hammond - added _TZ3000_7ysdnebc
 ver 0.2.1 12/29/2021 kkossev      - added cluster 0003 to the fingerprint, model _TZ3000_7ysdnebc
-ver 0.2.2 05/23/2022 kkossev      - moved model and inClusters to modelConfigs, added _TZE200_vm1gyrso 3-Gang Dimmer module
+ver 0.2.2 05/28/2022 kkossev      - moved model and inClusters to modelConfigs, added _TZE200_vm1gyrso 3-Gang Dimmer module
+ver 0.2.3 08/30/2022 kkossev      - added TS110E _TZ3210_ngqk6jia fingerprint
 
 */
 
 import groovy.transform.Field
 
+@Field static final Boolean debug = false
+@Field static final Boolean deviceSimulation = false
+@Field static final String  simulatedModel = "TS110E"
+@Field static final String  simulatedManufacturer = "_TZ3210_ngqk6jia"
+
 @Field static def modelConfigs = [
-    "_TYZB01_v8gtiaed": [ numEps: 2, model: "TS110F", inClusters: "0000,0004,0005,0006,0008", joinName: "Tuya Zigbee 2-Gang Dimmer module" ],                // '2 gang smart dimmer switch module with neutral'
-    "_TYZB01_qezuin6k": [ numEps: 1, model: "TS110F", inClusters: "0000,0004,0005,0006,0008", joinName: "Tuya Zigbee 1-Gang Dimmer module" ],                // '1 gang smart dimmer switch module with neutral'
-    "_TZ3000_ktuoyvt5": [ numEps: 1, model: "TS110F", inClusters: "0000,0004,0005,0006,0008", joinName: "Tuya Zigbee 1-Gang Switch module" ],                // '1 gang smart        switch module without neutral'
-    "_TZ3000_92chsky7": [ numEps: 2, model: "TS110F", inClusters: "0000,0004,0005,0006,0008", joinName: "Tuya Zigbee 2-Gang Dimmer module (no-neutral)" ],   // '2 gang smart dimmer switch module without neutral'
-    "_TZ3000_7ysdnebc": [ numEps: 2, model: "TS110F", inClusters: "0000,0004,0005,0003,0006,0008", joinName: "Tuya 2CH Zigbee dimmer module" ],
-    "_TZE200_vm1gyrso": [ numEps: 3, model: "TS0601", inClusters: "0004,0005,EF00,0000",      joinName: "Tuya Zigbee 3-Gang Dimmer module" ],    
-    "_TZE200_whpb9yts": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",      joinName: "Tuya Zigbee 1-Gang Dimmer module" ],                // 'Zigbee smart dimmer'
-    "_TZE200_ebwgzdqq": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",      joinName: "Tuya Zigbee 1-Gang Dimmer module" ],    
-    "_TZE200_9i9dt8is": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",      joinName: "Tuya Zigbee 1-Gang Dimmer module" ],    
-    "_TZE200_dfxkcots": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",      joinName: "Tuya Zigbee 1-Gang Dimmer module" ],    
-    "gq8b1uv":          [ numEps: 1, model: "gq8b1uv", inClusters: "0000,0004,0005,0006,0008",joinName: "Tuya Zigbee 1-Gang Dimmer module" ]                 //  TUYATEC Zigbee smart dimmer
+    "_TYZB01_v8gtiaed": [ numEps: 2, model: "TS110F", inClusters: "0000,0004,0005,0006,0008",     joinName: "Tuya Zigbee 2-Gang Dimmer module" ],                // '2 gang smart dimmer switch module with neutral'
+    "_TYZB01_qezuin6k": [ numEps: 1, model: "TS110F", inClusters: "0000,0004,0005,0006,0008",     joinName: "Tuya Zigbee 1-Gang Dimmer module" ],                // '1 gang smart dimmer switch module with neutral'
+    "_TZ3000_ktuoyvt5": [ numEps: 1, model: "TS110F", inClusters: "0000,0004,0005,0006,0008",     joinName: "Tuya Zigbee 1-Gang Switch module" ],                // '1 gang smart        switch module without neutral'
+    "_TZ3000_92chsky7": [ numEps: 2, model: "TS110F", inClusters: "0000,0004,0005,0006,0008",     joinName: "Tuya Zigbee 2-Gang Dimmer module (no-neutral)" ],   // '2 gang smart dimmer switch module without neutral'
+    "_TZ3000_7ysdnebc": [ numEps: 2, model: "TS110F", inClusters: "0000,0004,0005,0003,0006,0008",joinName: "Tuya 2CH Zigbee dimmer module" ],
+    "_TZE200_vm1gyrso": [ numEps: 3, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 3-Gang Dimmer module" ],    
+    "_TZE200_whpb9yts": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 1-Gang Dimmer module" ],                // 'Zigbee smart dimmer'
+    "_TZE200_ebwgzdqq": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 1-Gang Dimmer module" ],    
+    "_TZE200_9i9dt8is": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 1-Gang Dimmer module" ],    
+    "_TZE200_dfxkcots": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 1-Gang Dimmer module" ],    
+    "gq8b1uv":          [ numEps: 1, model: "gq8b1uv", inClusters: "0000,0004,0005,0006,0008",    joinName: "Tuya Zigbee 1-Gang Dimmer module" ],                 //  TUYATEC Zigbee smart dimmer
+    "_TZ3210_ngqk6jia": [ numEps: 2, model: "TS110E", inClusters: "0005,0004,0006,0008,EF00,0000", joinName: "Lonsonho 2-gang Dimmer module"],                    // https://www.aliexpress.com/item/4001279149071.html
+    "_TZ3210_zxbtub8r": [ numEps: 2, model: "TS110E", inClusters: "0005,0004,0006,0008,EF00,0000", joinName: "Lonsonho Dimmer module"]                            // not tested
 ]
     
 def config() {
@@ -66,11 +74,9 @@ def config() {
 
 def isTS0601() {
     if (isParent()) {
-        //log.trace "model = ${device.getDataValue('model')}"
         return device.getDataValue('model') == "TS0601"
     }
     else {
-        //log.trace "model = ${parent?.device.getDataValue('model')}"
         return parent?.device.getDataValue('model') == "TS0601"    
     }
 }
@@ -92,6 +98,14 @@ metadata {
         capability "SwitchLevel"
         
         command "toggle"
+        
+        if (debug == true) {
+            command "zTest", [
+                [name:"dpCommand", type: "STRING", description: "Tuya DP Command", constraints: ["STRING"]],
+                [name:"dpValue",   type: "STRING", description: "Tuya DP value", constraints: ["STRING"]],
+                [name:"dpType",    type: "ENUM",   constraints: ["DP_TYPE_VALUE", "DP_TYPE_BOOL", "DP_TYPE_ENUM"], description: "DP data type"] 
+            ]
+        }
         
         modelConfigs.each{ data ->
             fingerprint profileId: "0104",
@@ -181,12 +195,17 @@ def updated() {
 
 def initialized() {
     def cmds = []
-    logDebug device.getData()
+    if (debug == true && deviceSimulation == true) {
+        device.updateDataValue("model", simulatedModel)
+        device.updateDataValue("manufacturer", simulatedManufacturer)
+        logDebug "device simulation: ${simulatedModel} ${simulatedManufacturer}"
+    }
+    logDebug "initialized() device.getData() = ${device.getData()}"
     
     if (isParent()) {
         createChildDevices()   
         if (device.getDataValue("model") == "TS0601") {
-            log.warn "tuyaBlackMagic()"
+            log.warn "spelling tuyaBlackMagic()"
             cmds += tuyaBlackMagic()
         }
         cmds += listenChildDevices()
@@ -368,12 +387,10 @@ def cmdSwitch(String childDni, onOff) {
     onOff = onOff ? "1" : "0"
     
     if (isTS0601()) {
-        //ArrayList<String> cmds = []
-        //def dpType    = DP_TYPE_BOOL
         def dpValHex  = zigbee.convertToHexString(onOff as int, 2) 
         def cmd = childDni[-2..-1]
         def dpCommand = cmd == "01" ? "01" : cmd == "02" ? "07" : cmd == "03" ? "0F" : null
-        //log.warn "${device.displayName}  sending cmdSwitch command=${dpCommand} value=${onOff} ($dpValHex)"
+        //log.trace "${device.displayName}  sending cmdSwitch command=${dpCommand} value=${onOff} ($dpValHex)"
         return sendTuyaCommand(dpCommand, DP_TYPE_BOOL, dpValHex)       
     }
     return [
