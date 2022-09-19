@@ -47,7 +47,7 @@ ver 0.2.4 09/19/2022 kkossev      - added TS0601 _TZE200_w4cryh2i fingerprint
 */
 
 def version() { "0.2.4" }
-def timeStamp() {"2022/09/19 7:51 AM"}
+def timeStamp() {"2022/09/19 8:13 AM"}
 
 import groovy.transform.Field
 
@@ -70,7 +70,7 @@ import groovy.transform.Field
     "gq8b1uv":          [ numEps: 1, model: "gq8b1uv", inClusters: "0000,0004,0005,0006,0008",    joinName: "Tuya Zigbee 1-Gang Dimmer module" ],                 //  TUYATEC Zigbee smart dimmer
     "_TZ3210_ngqk6jia": [ numEps: 2, model: "TS110E", inClusters: "0005,0004,0006,0008,EF00,0000", joinName: "Lonsonho 2-gang Dimmer module"],                    // https://www.aliexpress.com/item/4001279149071.html
     "_TZ3210_zxbtub8r": [ numEps: 1, model: "TS110E", inClusters: "0004,0005,0003,0006,0008,EF00,0000", joinName: "GIRIER Dimmer module 1 ch."],                  // not tested
-    "_TZE200_w4cryh2i": [ numEps: 4, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Moes Zigbee 4-Gang Dimmer module" ]                  // https://community.hubitat.com/t/moes-zigbee-dimmer-touch/101195 
+    "_TZE200_w4cryh2i": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Moes Zigbee Rotary/Touch Light Dimmer" ]             // https://community.hubitat.com/t/moes-zigbee-dimmer-touch/101195 
 ]
     
 def config() {
