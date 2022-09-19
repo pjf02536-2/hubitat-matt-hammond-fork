@@ -42,8 +42,12 @@ ver 0.2.0 11/12/2021 Matt Hammond - added _TZ3000_7ysdnebc
 ver 0.2.1 12/29/2021 kkossev      - added cluster 0003 to the fingerprint, model _TZ3000_7ysdnebc
 ver 0.2.2 05/28/2022 kkossev      - moved model and inClusters to modelConfigs, added _TZE200_vm1gyrso 3-Gang Dimmer module
 ver 0.2.3 08/30/2022 kkossev      - added TS110E _TZ3210_ngqk6jia fingerprint
+ver 0.2.4 09/19/2022 kkossev      - added TS0601 _TZE200_w4cryh2i fingerprint
 
 */
+
+def version() { "0.2.4" }
+def timeStamp() {"2022/09/19 7:51 AM"}
 
 import groovy.transform.Field
 
@@ -65,7 +69,8 @@ import groovy.transform.Field
     "_TZE200_dfxkcots": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 1-Gang Dimmer module" ],    
     "gq8b1uv":          [ numEps: 1, model: "gq8b1uv", inClusters: "0000,0004,0005,0006,0008",    joinName: "Tuya Zigbee 1-Gang Dimmer module" ],                 //  TUYATEC Zigbee smart dimmer
     "_TZ3210_ngqk6jia": [ numEps: 2, model: "TS110E", inClusters: "0005,0004,0006,0008,EF00,0000", joinName: "Lonsonho 2-gang Dimmer module"],                    // https://www.aliexpress.com/item/4001279149071.html
-    "_TZ3210_zxbtub8r": [ numEps: 2, model: "TS110E", inClusters: "0005,0004,0006,0008,EF00,0000", joinName: "Lonsonho Dimmer module"]                            // not tested
+    "_TZ3210_zxbtub8r": [ numEps: 1, model: "TS110E", inClusters: "0004,0005,0003,0006,0008,EF00,0000", joinName: "GIRIER Dimmer module 1 ch."],                  // not tested
+    "_TZE200_w4cryh2i": [ numEps: 4, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Moes Zigbee 4-Gang Dimmer module" ]                  // https://community.hubitat.com/t/moes-zigbee-dimmer-touch/101195 
 ]
     
 def config() {
@@ -183,6 +188,7 @@ def initialize() {
 }
 
 def updated() {
+    checkDriverVersion()
     if (isParent()) {
         logInfo "updated parent->child"
         getChildByEndpointId(indexToEndpointId(0)).onParentSettingsChange(settings)
@@ -448,6 +454,7 @@ def doActions(List<String> cmds) {
 
 
 def parse(String description) {
+    checkDriverVersion()
     logInfo "Received raw: ${description}"
 
     if (isParent()) {
@@ -824,7 +831,17 @@ void sendZigbeeCommands(ArrayList<String> cmd) {
     sendHubCommand(allActions)
 }
 
+def driverVersionAndTimeStamp() {version() + ' ' + timeStamp() + ((debug==true) ? " debug version!" : " ")}
 
+def checkDriverVersion() {
+    if (state.driverVersion != null && driverVersionAndTimeStamp() == state.driverVersion) {
+        // no driver version change
+    }
+    else {
+        logDebug "${device.displayName} updating the settings from the current driver version ${state.driverVersion} to the new version ${driverVersionAndTimeStamp()}"
+        state.driverVersion = driverVersionAndTimeStamp()
+    }
+}
 
 def zTest( dpCommand, dpValue, dpTypeString ) {
     ArrayList<String> cmds = []
