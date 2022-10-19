@@ -43,12 +43,12 @@ ver 0.2.1 12/29/2021 kkossev      - added cluster 0003 to the fingerprint, model
 ver 0.2.2 05/28/2022 kkossev      - moved model and inClusters to modelConfigs, added _TZE200_vm1gyrso 3-Gang Dimmer module
 ver 0.2.3 08/30/2022 kkossev      - added TS110E _TZ3210_ngqk6jia fingerprint
 ver 0.2.4 09/19/2022 kkossev      - added TS0601 _TZE200_w4cryh2i fingerprint
-ver 0.2.5 10/19/2022 kkossev      - TS0601 level control
+ver 0.2.5 10/19/2022 kkossev      - TS0601 level control; infoLogging
 
 */
 
 def version() { "0.2.5" }
-def timeStamp() {"2022/10/19 9:04 PM"}
+def timeStamp() {"2022/10/19 10:46 PM"}
 
 import groovy.transform.Field
 
@@ -147,7 +147,8 @@ metadata {
             multiple: false,
             defaultValue: true
         
-        input "debugEnable", "bool", title: "Enable debug logging", required: false
+        input "debugEnable", "bool", title: "Enable debug logging", required: false, defaultValue: false
+        input "infoEnable", "bool", title: "Enable info logging", required: false, defaultValue: true
     }
 }
 
@@ -164,11 +165,16 @@ def logDebug(msg) {
 }
 
 def logInfo(msg) {
-    if (settings.debugEnable) {
+    if (settings.infoEnable) {
         log.info msg
     }
 }
 
+def logWarn(msg) {
+    if (settings.debugEnable) {
+        log.warn msg
+    }
+}
 
 /*
 -----------------------------------------------------------------------------
@@ -212,7 +218,7 @@ def initialized() {
     if (isParent()) {
         createChildDevices()   
         if (device.getDataValue("model") == "TS0601") {
-            log.warn "spelling tuyaBlackMagic()"
+            logWarn "spelling tuyaBlackMagic()"
             cmds += tuyaBlackMagic()
         }
         cmds += listenChildDevices()
@@ -366,7 +372,7 @@ Hub Action (cmd) generators
 def cmdRefresh(String childDni) {
     def endpointId = childDniToEndpointId(childDni)
     if (isTS0601()) {
-        log.warn "cmdRefresh NOT implemented for TS0601!"
+        logWarn "cmdRefresh NOT implemented for TS0601!"
         return null
     }
     return [
@@ -380,7 +386,7 @@ def cmdRefresh(String childDni) {
 def cmdSwitchToggle(String childDni) {
     def endpointId = childDniToEndpointId(childDni)
     if (isTS0601()) {
-        log.warn "cmdSwitchToggle NOT implemented for TS0601!"
+        logWarn "cmdSwitchToggle NOT implemented for TS0601!"
         return null
     }
     return [
@@ -390,6 +396,7 @@ def cmdSwitchToggle(String childDni) {
 }
 
 def cmdSwitch(String childDni, onOff) {
+    logDebug "cmdSwitch: childDni=${childDni} onOff=${onOff}"
     def endpointId = childDniToEndpointId(childDni)
     onOff = onOff ? "1" : "0"
     
@@ -397,7 +404,7 @@ def cmdSwitch(String childDni, onOff) {
         def dpValHex  = zigbee.convertToHexString(onOff as int, 2) 
         def cmd = childDni[-2..-1]
         def dpCommand = cmd == "01" ? "01" : cmd == "02" ? "07" : cmd == "03" ? "0F" : null
-        //log.trace "${device.displayName}  sending cmdSwitch command=${dpCommand} value=${onOff} ($dpValHex)"
+        logDebug "${device.displayName}  sending cmdSwitch command=${dpCommand} value=${onOff} ($dpValHex)"
         return sendTuyaCommand(dpCommand, DP_TYPE_BOOL, dpValHex)       
     }
     return [
@@ -413,20 +420,14 @@ def cmdSetLevel(String childDni, value, duration) {
 
     duration = (duration * 10).toInteger()
     def child = getChildByEndpointId(endpointId)
-        
+    logDebug "cmdSetLevel: child=${child} childDni=${childDni} value=${value} duration=${duration}"
     if (isTS0601()) {
         value = (value*10) as int 
         def dpValHex  = zigbee.convertToHexString(value as int, 8) 
         def cmd = childDni[-2..-1]
         def dpCommand = cmd == "01" ? "02" : cmd == "02" ? "08" : cmd == "03" ? "10" : null
-        log.trace "${device.displayName}  sending cmdSetLevel command=${dpCommand} value=${value} ($dpValHex)"
+        logDebug "${device.displayName}  sending cmdSetLevel command=${dpCommand} value=${value} ($dpValHex)"
         return sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)          
-        
-        /*
-        log.warn "cmdSetLevel NOT implemented for TS0601!"
-        return null
-        */
-        
     }
     
     def cmd = [
@@ -466,19 +467,19 @@ def doActions(List<String> cmds) {
 
 def parse(String description) {
     checkDriverVersion()
-    logInfo "Received raw: ${description}"
+    logDebug "Received raw: ${description}"
 
     if (isParent()) {
         def descMap = zigbee.parseDescriptionAsMap(description)
         logDebug "Received parsed: ${descMap}"
 
         if (description.startsWith("catchall")) {
-            log.trace "catchall clusterId=${descMap?.clusterId} command=${descMap?.command} data=${descMap?.data}"
+            logDebug "catchall clusterId=${descMap?.clusterId} command=${descMap?.command} data=${descMap?.data}"
             if (descMap?.clusterId == "EF00") {
                 return parseTuyaCluster(descMap)
             }
             else {
-                log.warn "Ignored non-Tuya cluster catchall clusterId=${descMap?.clusterId} command=${descMap?.command} data=${descMap?.data}"
+                logWarn "Ignored non-Tuya cluster catchall clusterId=${descMap?.clusterId} command=${descMap?.command} data=${descMap?.data}"
                 return null
             }
         }
@@ -487,7 +488,7 @@ def parse(String description) {
             def value = Integer.parseInt(descMap.value, 16)
         }
         catch (e) {
-            log.warn "exception caught while parsing description:  ${description}"
+            logWarn "exception caught while parsing description:  ${description}"
             value = 0
         }
         def child = getChildByEndpointId(descMap.endpoint)
@@ -511,7 +512,7 @@ def parse(String description) {
                 }
                 break
             default :
-                log.warn "UNPROCESSED endpoint=${descMap?.endpoint} cluster=${descMap?.cluster} command=${descMap?.command} attrInt = ${descMap?.attrInt} value= ${descMap?.value} data=${descMap?.data}"
+                logWarn "UNPROCESSED endpoint=${descMap?.endpoint} cluster=${descMap?.cluster} command=${descMap?.command} attrInt = ${descMap?.attrInt} value= ${descMap?.value} data=${descMap?.data}"
                 break
         }
     } else {
@@ -544,44 +545,45 @@ def parseTuyaCluster( descMap ) {
         case "02" : // Brightness1 (switch level state)
         case "08" : // Brightness2
         case "10" : // Brightness3
+            logDebug "Tuya Brighntness cmd=${cmd} value=${value}"
             handleTuyaClusterBrightnessCmd(cmd, value/10 as int)
             break        
         case "03" : // Minimum brightness1
         case "09" : // Minimum brightness2
         case "11" : // Minimum brightness3
             def switchNumber = cmd == "03" ? "01" : cmd == "09" ? "02" : cmd == "11" ? "03" : null
-            log.info "Minimum brightness ${switchNumber} is ${value/10 as int}"
+            logInfo "Minimum brightness ${switchNumber} is ${value/10 as int}"
             break
         case "05" : // Maximum brightness1
         case "0B" : // Maximum brightness1
         case "13" : // Maximum brightness1
             def switchNumber = cmd == "05" ? "01" : cmd == "0B" ? "02" : cmd == "13" ? "03" : null
-            log.info "Maximum brightness ${switchNumber} is ${value/10 as int}"
+            logInfo "Maximum brightness ${switchNumber} is ${value/10 as int}"
             break
         case "06" : // Countdown1
         case "0C" : // Countdown2
         case "14" : // Countdown3
             def switchNumber = cmd == "06" ? "01" : cmd == "0C" ? "02" : cmd == "14" ? "03" : null
-            log.info "Countdown ${switchNumber} is ${value}s"
+            logInfo "Countdown ${switchNumber} is ${value}s"
             break
         case "OE" : //14
-            log.info "Power-on Status Setting is ${value}"
+            logInfo "Power-on Status Setting is ${value}"
             break
         case "15" : //21
-            log.info "Light Mode is ${value}"
+            logInfo "Light Mode is ${value}"
             break
         case "1A" : //26
-            log.info "Switch backlight ${value}"
+            logInfo "Switch backlight ${value}"
             break
         default :
-            log.warn "UNHANDLED Tuya cmd=${cmd} value=${value}"
+            logWarn "UNHANDLED Tuya cmd=${cmd} value=${value}"
             break
     }
 }
 
 def handleTuyaClusterSwitchCmd(cmd,value) {
     def switchNumber = cmd == "01" ? "01" : cmd == "07" ? "02" : cmd == "0F" ? "03" : null
-    log.info "Switch ${switchNumber} is ${value==0 ? "off" : "on"}"
+    logInfo "Switch ${switchNumber} is ${value==0 ? "off" : "on"}"
     def child = getChildByEndpointId(switchNumber)
     def isFirst = 0 == endpointIdToIndex(switchNumber)
     child.onSwitchState(value)
@@ -596,7 +598,7 @@ def handleTuyaClusterSwitchCmd(cmd,value) {
 
 def handleTuyaClusterBrightnessCmd(cmd, value) {
     def switchNumber = cmd == "02" ? "01" : cmd == "08" ? "02" : cmd == "10" ? "03" : null
-    log.info "Brightness ${switchNumber} is ${value}%"
+    logInfo "Brightness ${switchNumber} is ${value}%"
     def child = getChildByEndpointId(switchNumber)
     def isFirst = 0 == endpointIdToIndex(switchNumber)
     child.onSwitchLevel(value)
@@ -624,7 +626,7 @@ private int getAttributeValue(ArrayList _data) {
         }
     }
     catch ( e ) {
-        log.error "Exception caught : data = ${_data}"
+        log.error "Exception caught while parsing Tuya data : ${_data}"
     }
     return retValue
 }
@@ -636,7 +638,7 @@ private sendTuyaCommand(int dp, int dpType, int fnCmd, int fnCmdLength) {
 	def dpHex = zigbee.convertToHexString(dp, 2)
 	def dpTypeHex = zigbee.convertToHexString(dpType, 2)
 	def fnCmdHex = zigbee.convertToHexString(fnCmd, fnCmdLength)
-	log.trace("sendTuyaCommand: dp=0x${dpHex}, dpType=0x${dpTypeHex}, fnCmd=0x${fnCmdHex}, fnCmdLength=${fnCmdLength}")
+	logDebug("sendTuyaCommand: dp=0x${dpHex}, dpType=0x${dpTypeHex}, fnCmd=0x${fnCmdHex}, fnCmdLength=${fnCmdLength}")
 	def message = (randomPacketId().toString()
 				   + dpHex
 				   + dpTypeHex
@@ -755,6 +757,10 @@ def levelToValue(BigDecimal level) {
 def levelToValue(Integer level) {
     if (isTS0601()) {
         return level
+        /*
+        Integer minValue = Math.round(settings.minLevel)
+        return rescale(level, 0, 100, minValue, 100)
+        */
     }
     else {
         Integer minValue = Math.round(settings.minLevel*2.55)
@@ -769,6 +775,14 @@ def valueToLevel(BigDecimal value) {
 def valueToLevel(Integer value) {
     if (isTS0601()) {
         return value
+        /*
+        Integer minValue = Math.round(settings.minLevel)
+        if (value < minValue) {
+            return 0
+        } else {
+            return rescale(value, minValue, 100, 0, 100)
+        }
+        */
     }
     else {
         Integer minValue = Math.round(settings.minLevel*2.55)
@@ -828,22 +842,17 @@ private getDP_TYPE_BITMAP()     { "05" }    // [ 1,2,4 bytes ] as bits
 private sendTuyaCommand(dp, dp_type, fncmd) {
     ArrayList<String> cmds = []
     cmds += zigbee.command(CLUSTER_TUYA, SETDATA, PACKET_ID + dp + dp_type + zigbee.convertToHexString((int)(fncmd.length()/2), 4) + fncmd )
-    if (settings?.logEnable) log.trace "${device.displayName} sendTuyaCommand = ${cmds}"
-    //if (state.txCounter != null) state.txCounter = state.txCounter + 1
+    logDebug "${device.displayName} sendTuyaCommand = ${cmds}"
     return cmds
 }
 
 private getPACKET_ID() {
-    /*
-    state.packetID = ((state.packetID ?: 0) + 1 ) % 65536
-    return zigbee.convertToHexString(state.packetID, 4)
-    */
     return randomPacketId()
 }
 
 
 void sendZigbeeCommands(ArrayList<String> cmd) {
-    if (settings?.logEnable) {log.trace "${device.displayName} sendZigbeeCommands(cmd=$cmd)"}
+    logDebug "${device.displayName} sendZigbeeCommands(cmd=$cmd)"
     hubitat.device.HubMultiAction allActions = new hubitat.device.HubMultiAction()
     cmd.each {
             allActions.add(new hubitat.device.HubAction(it, hubitat.device.Protocol.ZIGBEE))
@@ -869,7 +878,7 @@ def zTest( dpCommand, dpValue, dpTypeString ) {
     def dpType   = dpTypeString=="DP_TYPE_VALUE" ? DP_TYPE_VALUE : dpTypeString=="DP_TYPE_BOOL" ? DP_TYPE_BOOL : dpTypeString=="DP_TYPE_ENUM" ? DP_TYPE_ENUM : null
     def dpValHex = dpTypeString=="DP_TYPE_VALUE" ? zigbee.convertToHexString(dpValue as int, 8) : dpValue
 
-    log.warn "${device.displayName}  sending TEST command=${dpCommand} value=${dpValue} ($dpValHex) type=${dpType}"
+    logWarn "${device.displayName}  sending TEST command=${dpCommand} value=${dpValue} ($dpValHex) type=${dpType}"
 
     sendZigbeeCommands( sendTuyaCommand(dpCommand, dpType, dpValHex) )
 }    
