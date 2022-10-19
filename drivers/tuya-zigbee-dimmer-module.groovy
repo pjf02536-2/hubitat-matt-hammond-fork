@@ -43,18 +43,19 @@ ver 0.2.1 12/29/2021 kkossev      - added cluster 0003 to the fingerprint, model
 ver 0.2.2 05/28/2022 kkossev      - moved model and inClusters to modelConfigs, added _TZE200_vm1gyrso 3-Gang Dimmer module
 ver 0.2.3 08/30/2022 kkossev      - added TS110E _TZ3210_ngqk6jia fingerprint
 ver 0.2.4 09/19/2022 kkossev      - added TS0601 _TZE200_w4cryh2i fingerprint
+ver 0.2.5 10/19/2022 kkossev      - TS0601 level control
 
 */
 
-def version() { "0.2.4" }
-def timeStamp() {"2022/09/19 8:13 AM"}
+def version() { "0.2.5" }
+def timeStamp() {"2022/10/19 9:04 PM"}
 
 import groovy.transform.Field
 
 @Field static final Boolean debug = false
 @Field static final Boolean deviceSimulation = false
-@Field static final String  simulatedModel = "TS110E"
-@Field static final String  simulatedManufacturer = "_TZ3210_ngqk6jia"
+@Field static final String  simulatedModel = "TS0601"
+@Field static final String  simulatedManufacturer = "_TZE200_w4cryh2i"
 
 @Field static def modelConfigs = [
     "_TYZB01_v8gtiaed": [ numEps: 2, model: "TS110F", inClusters: "0000,0004,0005,0006,0008",     joinName: "Tuya Zigbee 2-Gang Dimmer module" ],                // '2 gang smart dimmer switch module with neutral'
@@ -414,8 +415,18 @@ def cmdSetLevel(String childDni, value, duration) {
     def child = getChildByEndpointId(endpointId)
         
     if (isTS0601()) {
+        value = (value*10) as int 
+        def dpValHex  = zigbee.convertToHexString(value as int, 8) 
+        def cmd = childDni[-2..-1]
+        def dpCommand = cmd == "01" ? "02" : cmd == "02" ? "08" : cmd == "03" ? "10" : null
+        log.trace "${device.displayName}  sending cmdSetLevel command=${dpCommand} value=${value} ($dpValHex)"
+        return sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)          
+        
+        /*
         log.warn "cmdSetLevel NOT implemented for TS0601!"
         return null
+        */
+        
     }
     
     def cmd = [
@@ -742,8 +753,13 @@ def levelToValue(BigDecimal level) {
 }
 
 def levelToValue(Integer level) {
-    Integer minValue = Math.round(settings.minLevel*2.55)
-    return rescale(level, 0, 100, minValue, 255)
+    if (isTS0601()) {
+        return level
+    }
+    else {
+        Integer minValue = Math.round(settings.minLevel*2.55)
+        return rescale(level, 0, 100, minValue, 255)
+    }
 }
 
 def valueToLevel(BigDecimal value) {
@@ -751,11 +767,16 @@ def valueToLevel(BigDecimal value) {
 }
 
 def valueToLevel(Integer value) {
-    Integer minValue = Math.round(settings.minLevel*2.55)
-    if (value < minValue) {
-        return 0
-    } else {
-        return rescale(value, minValue, 255, 0, 100)
+    if (isTS0601()) {
+        return value
+    }
+    else {
+        Integer minValue = Math.round(settings.minLevel*2.55)
+        if (value < minValue) {
+            return 0
+        } else {
+            return rescale(value, minValue, 255, 0, 100)
+        }
     }
 }
 
