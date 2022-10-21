@@ -44,11 +44,12 @@ ver 0.2.2 05/28/2022 kkossev      - moved model and inClusters to modelConfigs, 
 ver 0.2.3 08/30/2022 kkossev      - added TS110E _TZ3210_ngqk6jia fingerprint
 ver 0.2.4 09/19/2022 kkossev      - added TS0601 _TZE200_w4cryh2i fingerprint
 ver 0.2.5 10/19/2022 kkossev      - TS0601 level control; infoLogging
+ver 0.2.6 10/21/2022 kkossev      - (dev. branch) importURL to dev. branch; toggle() for DP0601;
 
 */
 
-def version() { "0.2.5" }
-def timeStamp() {"2022/10/19 10:46 PM"}
+def version() { "0.2.6" }
+def timeStamp() {"2022/10/21 6:20 PM"}
 
 import groovy.transform.Field
 
@@ -94,7 +95,8 @@ metadata {
         namespace: "matthammonddotorg",
         author: "Matt Hammond",
         description: "Driver for Tuya zigbee dimmer modules",
-        documentationLink: "https://github.com/matt-hammond-001/hubitat-code/blob/master/drivers/tuya-zigbee-dimmer-module.README.md"
+        documentationLink: "https://github.com/matt-hammond-001/hubitat-code/blob/master/drivers/tuya-zigbee-dimmer-module.README.md",
+        importUrl: "https://raw.githubusercontent.com/kkossev/hubitat-matt-hammond-fork/master/drivers/tuya-zigbee-dimmer-module.groovy"
     ) {
 
         capability "Configuration"
@@ -132,12 +134,19 @@ metadata {
             multiple: false,
             defaultValue: 0
         
-        if (minLevel < 0) {
-            minLevel = 0
-        } else if (minLevel > 99) {
-            minLevel = 99
-        }
+            if (minLevel < 0) {
+                minLevel = 0
+            } else if (minLevel > 99) {
+                minLevel = 99
+            }
 
+        input "maxLevel", "number", title: "Maximum level", description: "Maximum brightness level (%). 0% on the dimmer level is mapped to this.", required: true, multiple: false, defaultValue: 100
+        if (maxLevel < minLevel) {
+            maxLevel = 100
+        } 
+        else if (maxLevel > 100) {
+            maxLevel = 100
+        }
         
         input "autoOn",
             "bool",
@@ -218,10 +227,14 @@ def initialized() {
     if (isParent()) {
         createChildDevices()   
         if (device.getDataValue("model") == "TS0601") {
-            logWarn "spelling tuyaBlackMagic()"
+            logDebug "spelling tuyaBlackMagic()"
             cmds += tuyaBlackMagic()
         }
         cmds += listenChildDevices()
+        //
+    }
+    else {
+        logDebug "skipping initialized() for child device"
     }
     return cmds
 }
@@ -297,16 +310,25 @@ Propagate settings changes both ways between Parent and First Child
 
 def onChildSettingsChange(childDni, childSettings) {
     def i = endpointIdToIndex(childDniToEndpointId(childDni))
-    logInfo "onChildSettingsChange: ${i}"
+    logInfo "updating settings for child device #${i} ..."
     if (i==0) {
         device.updateSetting("minLevel",childSettings.minLevel)
+        device.updateSetting("maxLevel",childSettings.maxLevel)
         device.updateSetting("autoOn",childSettings.autoOn)
+    }
+    else {
+        logWarn "skipped onChildSettingsChange() for child device #${i}"
     }
 }
 
 def onParentSettingsChange(parentSettings) {
+    logInfo "updating settings for the parent device ..."
     device.updateSetting("minLevel",parentSettings.minLevel)
+    device.updateSetting("maxLevel",parentSettings.maxLevel)
     device.updateSetting("autoOn",parentSettings.autoOn)
+    if (isTS0601()) {
+        logWarn "Min/Max levels NOT changed on the parent device"
+    }
 }
  
 /*
@@ -386,8 +408,12 @@ def cmdRefresh(String childDni) {
 def cmdSwitchToggle(String childDni) {
     def endpointId = childDniToEndpointId(childDni)
     if (isTS0601()) {
-        logWarn "cmdSwitchToggle NOT implemented for TS0601!"
-        return null
+        if (device.currentState('switch', true).value == 'on') {
+            return cmdSwitch(childDni, 0)
+        }
+        else {
+            return cmdSwitch(childDni, 1)
+        }
     }
     return [
         "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 2 {}",
@@ -495,6 +521,9 @@ def parse(String description) {
         def isFirst = 0 == endpointIdToIndex(descMap.endpoint)
             
         switch (descMap.clusterInt) {
+            case 0x0000: // basic cluster
+                parseBasicCluster( descMap )
+                break
             case 0x0006: // switch state
                 child.onSwitchState(value)
                 if (isFirst && child != this) {
@@ -515,7 +544,8 @@ def parse(String description) {
                 logWarn "UNPROCESSED endpoint=${descMap?.endpoint} cluster=${descMap?.cluster} command=${descMap?.command} attrInt = ${descMap?.attrInt} value= ${descMap?.value} data=${descMap?.data}"
                 break
         }
-    } else {
+    } 
+    else {
         throw new Exception("parse() called incorrectly by child")
     }
 }
@@ -532,6 +562,10 @@ def tuyaBlackMagic() {
 
 def parseTuyaCluster( descMap ) {
     if (descMap.clusterId != "EF00") {
+        return null
+    }
+    if (descMap.command == "0B") {
+        logDebug "Tuya command 0x0B data=${descMap.data}"
         return null
     }
     def cmd = descMap.data[2]
@@ -579,6 +613,21 @@ def parseTuyaCluster( descMap ) {
             logWarn "UNHANDLED Tuya cmd=${cmd} value=${value}"
             break
     }
+}
+
+def parseBasicCluster( descMap ) {
+    switch (descMap.attrId) {
+        case "0001" :
+            logDebug "Tuya check-in ${descMap.attrId} (${descMap.value})"
+            break
+        case "0004" : // attrInt = 4 value= _TZE200_vm1gyrso data=null
+            logDebug "Tuya check-in ${descMap.attrId} (${descMap.value})"
+            break
+        default :
+            logWarn "unprocessed Basic cluster endpoint=${descMap?.endpoint} cluster=${descMap?.cluster} command=${descMap?.command} attrInt = ${descMap?.attrInt} value= ${descMap?.value} data=${descMap?.data}"
+            break
+    }
+    
 }
 
 def handleTuyaClusterSwitchCmd(cmd,value) {
@@ -688,10 +737,14 @@ def indexToEndpointId(i) {
 }
 
 def endpointIdToIndex(i) {
+    //log.trace "endpointIdToIndex i=${i}"
     return Integer.parseInt(i,16) - 1
 }
 
 def endpointIdToChildDni(endpointId) {
+    //log.trace "endpointIdToChildDni ${endpointId} = ${device.deviceNetworkId} - ${endpointId}"
+    //def childDni = "${device.deviceNetworkId}-${endpointId}"
+    //log.trace "childDni = ${childDni}"
     return "${device.deviceNetworkId}-${endpointId}"
 }
 
@@ -719,9 +772,12 @@ def childDnisToEndpointIds(List<String> childDnis) {
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 def getChildByEndpointId(endpointId) {
+    //log.trace "getChildByEndpointId endpointId=${endpointId}"
     if (endpointIdToIndex(endpointId) == 0 && getChildDevices().size() == 0) {
+        //log.trace "getChildByEndpointId returning this: ${this}"
         return this
     } else {
+        //log.trace "getChildByEndpointId returning getChildDevice: ${getChildDevice(endpointIdToChildDni(endpointId))}"
         return getChildDevice(endpointIdToChildDni(endpointId))
     }
 }
@@ -755,17 +811,12 @@ def levelToValue(BigDecimal level) {
 }
 
 def levelToValue(Integer level) {
-    if (isTS0601()) {
-        return level
-        /*
-        Integer minValue = Math.round(settings.minLevel)
-        return rescale(level, 0, 100, minValue, 100)
-        */
-    }
-    else {
-        Integer minValue = Math.round(settings.minLevel*2.55)
-        return rescale(level, 0, 100, minValue, 255)
-    }
+    def mult = isTS0601() ? 1.0 : 2.55 
+    Integer minValue = Math.round(settings.minLevel * mult)
+    Integer maxValue = Math.round(settings.maxLevel * mult)
+    def reScaled =  rescale(level, 0, 100, minValue, maxValue)
+    logDebug "level=${level} reScaled=${reScaled}"
+    return reScaled
 }
 
 def valueToLevel(BigDecimal value) {
@@ -773,25 +824,14 @@ def valueToLevel(BigDecimal value) {
 }
 
 def valueToLevel(Integer value) {
-    if (isTS0601()) {
-        return value
-        /*
-        Integer minValue = Math.round(settings.minLevel)
-        if (value < minValue) {
-            return 0
-        } else {
-            return rescale(value, minValue, 100, 0, 100)
-        }
-        */
-    }
-    else {
-        Integer minValue = Math.round(settings.minLevel*2.55)
-        if (value < minValue) {
-            return 0
-        } else {
-            return rescale(value, minValue, 255, 0, 100)
-        }
-    }
+    def mult = isTS0601() ? 1.0 : 2.55 
+    Integer minValue = Math.round(settings.minLevel * mult)
+    Integer maxValue = Math.round(settings.maxLevel * mult)
+    if (value < minValue) return 0
+    if (value > maxValue) return 100
+    def reScaled = rescale(value, minValue, maxValue, 0, 100)
+    logDebug "value=${value} reScaled=${reScaled}"
+    return reScaled
 }
 
 
