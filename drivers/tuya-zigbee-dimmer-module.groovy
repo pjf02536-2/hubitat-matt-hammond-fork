@@ -44,12 +44,12 @@ ver 0.2.2 05/28/2022 kkossev      - moved model and inClusters to modelConfigs, 
 ver 0.2.3 08/30/2022 kkossev      - added TS110E _TZ3210_ngqk6jia fingerprint
 ver 0.2.4 09/19/2022 kkossev      - added TS0601 _TZE200_w4cryh2i fingerprint
 ver 0.2.5 10/19/2022 kkossev      - TS0601 level control; infoLogging
-ver 0.2.6 10/21/2022 kkossev      - (dev. branch) importURL to dev. branch; toggle() for TS0601; 'autoOn' for TS0601; level scaling for TS0601
+ver 0.2.6 10/21/2022 kkossev      - (dev. branch) importURL to dev. branch; toggle() for TS0601; 'autoOn' for TS0601; level scaling for TS0601; minLevel receive for TS0601
 
 */
 
 def version() { "0.2.6" }
-def timeStamp() {"2022/10/21 7:43 PM"}
+def timeStamp() {"2022/10/21 8:45 PM"}
 
 import groovy.transform.Field
 
@@ -140,7 +140,7 @@ metadata {
                 minLevel = 99
             }
 
-        input "maxLevel", "number", title: "Maximum level", description: "Maximum brightness level (%). 0% on the dimmer level is mapped to this.", required: true, multiple: false, defaultValue: 100
+        input "maxLevel", "number", title: "Maximum level", description: "Maximum brightness level (%). 100% on the dimmer level is mapped to this.", required: true, multiple: false, defaultValue: 100
         if (maxLevel < minLevel) {
             maxLevel = 100
         } 
@@ -594,7 +594,8 @@ def parseTuyaCluster( descMap ) {
         case "11" : // Minimum brightness3
             def switchNumber = cmd == "03" ? "01" : cmd == "09" ? "02" : cmd == "11" ? "03" : null
             logInfo "Minimum brightness ${switchNumber} is ${value/10 as int}"
-            break
+            handleTuyaClusterMinBrightnessCmd(cmd, value/10 as int)
+        break
         case "05" : // Maximum brightness1
         case "0B" : // Maximum brightness1
         case "13" : // Maximum brightness1
@@ -667,7 +668,21 @@ def handleTuyaClusterBrightnessCmd(cmd, value) {
        // logDebug "${isFirst} ${this} ${child} ${value}"
     }
 }
-    
+
+def handleTuyaClusterMinBrightnessCmd(cmd, value) {
+    def switchNumber = cmd == "03" ? "01" : cmd == "09" ? "02" : cmd == "11" ? "03" : null
+    def child = getChildByEndpointId(switchNumber)
+    log.trace "child = ${child}"
+    def isFirst = 0 == endpointIdToIndex(switchNumber)
+    //
+    child.updateSetting("minLevel", [value: value , type:"number"])
+    logInfo "minLevel brightness parameter for switch #${switchNumber} was updated to ${value}%"
+    if (isFirst && child != this) {
+        logDebug "Replicating minBrightness in parent"
+        device.updateSetting("minLevel", [value: value , type:"number"])
+    }
+}
+
 
 
 private int getAttributeValue(ArrayList _data) {
