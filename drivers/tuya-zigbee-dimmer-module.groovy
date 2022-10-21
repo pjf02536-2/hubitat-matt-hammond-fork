@@ -44,12 +44,12 @@ ver 0.2.2 05/28/2022 kkossev      - moved model and inClusters to modelConfigs, 
 ver 0.2.3 08/30/2022 kkossev      - added TS110E _TZ3210_ngqk6jia fingerprint
 ver 0.2.4 09/19/2022 kkossev      - added TS0601 _TZE200_w4cryh2i fingerprint
 ver 0.2.5 10/19/2022 kkossev      - TS0601 level control; infoLogging
-ver 0.2.6 10/21/2022 kkossev      - (dev. branch) importURL to dev. branch; toggle() for TS0601; 'autoOn' for TS0601;
+ver 0.2.6 10/21/2022 kkossev      - (dev. branch) importURL to dev. branch; toggle() for TS0601; 'autoOn' for TS0601; level scaling for TS0601
 
 */
 
 def version() { "0.2.6" }
-def timeStamp() {"2022/10/21 6:57 PM"}
+def timeStamp() {"2022/10/21 7:43 PM"}
 
 import groovy.transform.Field
 
@@ -654,7 +654,8 @@ def handleTuyaClusterSwitchCmd(cmd,value) {
 
 def handleTuyaClusterBrightnessCmd(cmd, value) {
     def switchNumber = cmd == "02" ? "01" : cmd == "08" ? "02" : cmd == "10" ? "03" : null
-    logInfo "Brightness ${switchNumber} is ${value}%"
+    scaledValue = valueToLevel(value)
+    logInfo "Brightness ${switchNumber} is ${scaledValue}% (${value})"
     def child = getChildByEndpointId(switchNumber)
     def isFirst = 0 == endpointIdToIndex(switchNumber)
     child.onSwitchLevel(value)
@@ -721,8 +722,8 @@ def onSwitchState(value) {
 
 def onSwitchLevel(value) {
     logDebug "onSwitchLevel: value=${value}"
-    def level = isTS0601() ?  value : valueToLevel(value.toInteger())
-    logDebug "onSwitchLevel: Value=${value} level=${level}"
+    def level = valueToLevel(value.toInteger())
+    logDebug "onSwitchLevel: Value=${value} level=${level} (value=${value})"
     
     sendEvent(name:"level", value: level, descriptionText:"${device.displayName} set ${level}%", unit: "%")
 }
