@@ -44,12 +44,12 @@ ver 0.2.2 05/28/2022 kkossev      - moved model and inClusters to modelConfigs, 
 ver 0.2.3 08/30/2022 kkossev      - added TS110E _TZ3210_ngqk6jia fingerprint
 ver 0.2.4 09/19/2022 kkossev      - added TS0601 _TZE200_w4cryh2i fingerprint
 ver 0.2.5 10/19/2022 kkossev      - TS0601 level control; infoLogging
-ver 0.2.6 10/21/2022 kkossev      - (dev. branch) importURL to dev. branch; toggle() for DP0601;
+ver 0.2.6 10/21/2022 kkossev      - (dev. branch) importURL to dev. branch; toggle() for TS0601; 'autoOn' for TS0601;
 
 */
 
 def version() { "0.2.6" }
-def timeStamp() {"2022/10/21 6:20 PM"}
+def timeStamp() {"2022/10/21 6:57 PM"}
 
 import groovy.transform.Field
 
@@ -431,6 +431,7 @@ def cmdSwitch(String childDni, onOff) {
         def cmd = childDni[-2..-1]
         def dpCommand = cmd == "01" ? "01" : cmd == "02" ? "07" : cmd == "03" ? "0F" : null
         logDebug "${device.displayName}  sending cmdSwitch command=${dpCommand} value=${onOff} ($dpValHex)"
+        
         return sendTuyaCommand(dpCommand, DP_TYPE_BOOL, dpValHex)       
     }
     return [
@@ -448,12 +449,18 @@ def cmdSetLevel(String childDni, value, duration) {
     def child = getChildByEndpointId(endpointId)
     logDebug "cmdSetLevel: child=${child} childDni=${childDni} value=${value} duration=${duration}"
     if (isTS0601()) {
+        ArrayList<String> cmdsTuya = []
         value = (value*10) as int 
         def dpValHex  = zigbee.convertToHexString(value as int, 8) 
         def cmd = childDni[-2..-1]
         def dpCommand = cmd == "01" ? "02" : cmd == "02" ? "08" : cmd == "03" ? "10" : null
         logDebug "${device.displayName}  sending cmdSetLevel command=${dpCommand} value=${value} ($dpValHex)"
-        return sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)          
+        cmdsTuya = sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
+        if (child.isAutoOn() && device.currentState('switch', true).value != 'on') {
+            logDebug "${device.displayName}  sending cmdSwitch on for switch #${endpointId}"
+            cmdsTuya += cmdSwitch(childDni, 1)
+        }
+        return cmdsTuya
     }
     
     def cmd = [
