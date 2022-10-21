@@ -44,12 +44,12 @@ ver 0.2.2 05/28/2022 kkossev      - moved model and inClusters to modelConfigs, 
 ver 0.2.3 08/30/2022 kkossev      - added TS110E _TZ3210_ngqk6jia fingerprint
 ver 0.2.4 09/19/2022 kkossev      - added TS0601 _TZE200_w4cryh2i fingerprint
 ver 0.2.5 10/19/2022 kkossev      - TS0601 level control; infoLogging
-ver 0.2.6 10/21/2022 kkossev      - (dev. branch) importURL to dev. branch; toggle() for TS0601; 'autoOn' for TS0601; level scaling for TS0601; minLevel and maxLevel receive for TS0601
+ver 0.2.6 10/21/2022 kkossev      - (dev. branch) importURL to dev. branch; toggle() for TS0601; 'autoOn' for TS0601; level scaling for TS0601; minLevel and maxLevel receive for TS0601; minLevel send
 
 */
 
 def version() { "0.2.6" }
-def timeStamp() {"2022/10/21 9:18 PM"}
+def timeStamp() {"2022/10/21 11:57 PM"}
 
 import groovy.transform.Field
 
@@ -204,7 +204,32 @@ def initialize() {
 }
 
 def updated() {
+    log.trace "updated() ..."
     checkDriverVersion()
+    //
+    if (isTS0601()) {
+        ArrayList<String> cmdsTuya = []
+        def cmd = this.device.getData().componentName[-2..-1]
+        logInfo "### updating settings for child device ${this.device.getData().componentName} ... device #${cmd}"
+    
+        // minLevel
+        Integer value = Math.round(/*childSettings*/ this.minLevel * 10)
+        def dpValHex  = zigbee.convertToHexString(value as int, 8) 
+        log.trace "updated() minLevel value = $value"
+        def dpCommand = cmd == "01" ? "03" : cmd == "02" ? "09" : cmd == "03" ? "11" : null
+        logDebug "sending minLevel command=${dpCommand} value=${value} ($dpValHex)"
+        cmdsTuya = parent?.sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
+        
+        
+    hubitat.device.HubMultiAction allActions = new hubitat.device.HubMultiAction()
+    cmdsTuya.each {
+            allActions.add(new hubitat.device.HubAction(it, hubitat.device.Protocol.ZIGBEE))
+    }
+    sendHubCommand(allActions)        
+        
+        
+        //return cmdsTuya
+    }
     if (isParent()) {
         logInfo "updated parent->child"
         getChildByEndpointId(indexToEndpointId(0)).onParentSettingsChange(settings)
@@ -310,14 +335,14 @@ Propagate settings changes both ways between Parent and First Child
 
 def onChildSettingsChange(childDni, childSettings) {
     def i = endpointIdToIndex(childDniToEndpointId(childDni))
-    logInfo "updating settings for child device #${i} ..."
+    logInfo "updating settings for child device #${i+1} ..."
     if (i==0) {
         device.updateSetting("minLevel",childSettings.minLevel)
         device.updateSetting("maxLevel",childSettings.maxLevel)
         device.updateSetting("autoOn",childSettings.autoOn)
     }
     else {
-        logWarn "skipped onChildSettingsChange() for child device #${i}"
+        logWarn "skipped onChildSettingsChange() for child device #${i+1}"
     }
 }
 
@@ -673,7 +698,7 @@ def handleTuyaClusterBrightnessCmd(cmd, value) {
 def handleTuyaClusterMinBrightnessCmd(cmd, value) {
     def switchNumber = cmd == "03" ? "01" : cmd == "09" ? "02" : cmd == "11" ? "03" : null
     def child = getChildByEndpointId(switchNumber)
-    log.trace "child = ${child}"
+    log.trace "cmd=${cmd} switchNumber=${switchNumber} child = ${child}"
     def isFirst = 0 == endpointIdToIndex(switchNumber)
     //
     child.updateSetting("minLevel", [value: value , type:"number"])
@@ -719,8 +744,8 @@ private int getAttributeValue(ArrayList _data) {
 }
 
 private sendTuyaCommand(int dp, int dpType, int fnCmd, int fnCmdLength) {
-	atomicState.waitingForResponseSinceMillis = now()
-	checkForResponse()
+	//atomicState.waitingForResponseSinceMillis = now()
+	//checkForResponse()
     
 	def dpHex = zigbee.convertToHexString(dp, 2)
 	def dpTypeHex = zigbee.convertToHexString(dpType, 2)
@@ -732,7 +757,7 @@ private sendTuyaCommand(int dp, int dpType, int fnCmd, int fnCmdLength) {
 				   + zigbee.convertToHexString((fnCmdLength / 2) as int, 4)
 				   + fnCmdHex)
 	logTrace("sendTuyaCommand: message=${message}")
-	zigbee.command(CLUSTER_TUYA, ZIGBEE_COMMAND_SET_DATA, message)
+	/*parent?.*/ zigbee.command(CLUSTER_TUYA, ZIGBEE_COMMAND_SET_DATA, message)
 }
 
 private randomPacketId() {
@@ -934,7 +959,6 @@ void sendZigbeeCommands(ArrayList<String> cmd) {
     hubitat.device.HubMultiAction allActions = new hubitat.device.HubMultiAction()
     cmd.each {
             allActions.add(new hubitat.device.HubAction(it, hubitat.device.Protocol.ZIGBEE))
-            //if (state.txCounter != null) state.txCounter = state.txCounter + 1
     }
     sendHubCommand(allActions)
 }
