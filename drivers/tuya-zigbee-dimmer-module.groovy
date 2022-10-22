@@ -44,12 +44,12 @@ ver 0.2.2 05/28/2022 kkossev      - moved model and inClusters to modelConfigs, 
 ver 0.2.3 08/30/2022 kkossev      - added TS110E _TZ3210_ngqk6jia fingerprint
 ver 0.2.4 09/19/2022 kkossev      - added TS0601 _TZE200_w4cryh2i fingerprint
 ver 0.2.5 10/19/2022 kkossev      - TS0601 level control; infoLogging
-ver 0.2.6 10/21/2022 kkossev      - (dev. branch) importURL to dev. branch; toggle() for TS0601; 'autoOn' for TS0601; level scaling for TS0601; minLevel and maxLevel receive for TS0601; minLevel send
+ver 0.2.6 10/22/2022 kkossev      - (dev. branch) importURL to dev. branch; toggle() for TS0601; 'autoOn' for TS0601; level scaling for TS0601; minLevel and maxLevel receive/send for TS0601;
 
 */
 
 def version() { "0.2.6" }
-def timeStamp() {"2022/10/21 11:57 PM"}
+def timeStamp() {"2022/10/22 9:27 AM"}
 
 import groovy.transform.Field
 
@@ -211,24 +211,26 @@ def updated() {
         ArrayList<String> cmdsTuya = []
         def cmd = this.device.getData().componentName[-2..-1]
         logInfo "### updating settings for child device ${this.device.getData().componentName} ... device #${cmd}"
-    
         // minLevel
-        Integer value = Math.round(/*childSettings*/ this.minLevel * 10)
+        Integer value = Math.round(this.minLevel * 10)
         def dpValHex  = zigbee.convertToHexString(value as int, 8) 
         log.trace "updated() minLevel value = $value"
         def dpCommand = cmd == "01" ? "03" : cmd == "02" ? "09" : cmd == "03" ? "11" : null
         logDebug "sending minLevel command=${dpCommand} value=${value} ($dpValHex)"
-        cmdsTuya = parent?.sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
-        
-        
-    hubitat.device.HubMultiAction allActions = new hubitat.device.HubMultiAction()
-    cmdsTuya.each {
+        cmdsTuya += parent?.sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
+        // maxLevel
+        value = Math.round(this.maxLevel * 10)
+        dpValHex  = zigbee.convertToHexString(value as int, 8) 
+        log.trace "updated() maxLevel value = $value"
+        dpCommand = cmd == "01" ? "05" : cmd == "02" ? "0B" : cmd == "03" ? "13" : null
+        logDebug "sending maxLevel command=${dpCommand} value=${value} ($dpValHex)"
+        cmdsTuya += parent?.sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
+        //
+        hubitat.device.HubMultiAction allActions = new hubitat.device.HubMultiAction()
+        cmdsTuya.each {
             allActions.add(new hubitat.device.HubAction(it, hubitat.device.Protocol.ZIGBEE))
-    }
-    sendHubCommand(allActions)        
-        
-        
-        //return cmdsTuya
+        }
+        sendHubCommand(allActions)        
     }
     if (isParent()) {
         logInfo "updated parent->child"
@@ -618,14 +620,14 @@ def parseTuyaCluster( descMap ) {
         case "09" : // Minimum brightness2
         case "11" : // Minimum brightness3
             def switchNumber = cmd == "03" ? "01" : cmd == "09" ? "02" : cmd == "11" ? "03" : null
-            //logInfo "Minimum brightness ${switchNumber} is ${value/10 as int}"
+            //logDebug "Minimum brightness ${switchNumber} is ${value/10 as int}"
             handleTuyaClusterMinBrightnessCmd(cmd, value/10 as int)
             break
         case "05" : // Maximum brightness1
         case "0B" : // Maximum brightness2
         case "13" : // Maximum brightness3
             def switchNumber = cmd == "05" ? "01" : cmd == "0B" ? "02" : cmd == "13" ? "03" : null
-            //logInfo "Maximum brightness ${switchNumber} is ${value/10 as int}"
+            //logDebug "Maximum brightness ${switchNumber} is ${value/10 as int}"
             handleTuyaClusterMaxBrightnessCmd(cmd, value/10 as int)
             break
         case "06" : // Countdown1
