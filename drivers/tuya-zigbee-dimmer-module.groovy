@@ -44,12 +44,12 @@ ver 0.2.2 05/28/2022 kkossev      - moved model and inClusters to modelConfigs, 
 ver 0.2.3 08/30/2022 kkossev      - added TS110E _TZ3210_ngqk6jia fingerprint
 ver 0.2.4 09/19/2022 kkossev      - added TS0601 _TZE200_w4cryh2i fingerprint
 ver 0.2.5 10/19/2022 kkossev      - TS0601 level control; infoLogging
-ver 0.2.6 10/22/2022 kkossev      - (dev. branch) importURL to dev. branch; toggle() for TS0601; 'autoOn' for TS0601; level scaling for TS0601; minLevel and maxLevel receive/send for TS0601;
+ver 0.2.6 10/22/2022 kkossev      - importURL to dev. branch; toggle() for TS0601; 'autoOn' for TS0601; level scaling for TS0601; minLevel and maxLevel receive/send for TS0601; bugfixes for TS0601 single EP devices
 
 */
 
 def version() { "0.2.6" }
-def timeStamp() {"2022/10/22 9:27 AM"}
+def timeStamp() {"2022/10/22 11:23 PM"}
 
 import groovy.transform.Field
 
@@ -204,27 +204,37 @@ def initialize() {
 }
 
 def updated() {
-    log.trace "updated() ..."
+    logDebug "updated() ..."
     checkDriverVersion()
     //
     if (isTS0601()) {
         ArrayList<String> cmdsTuya = []
-        def cmd = this.device.getData().componentName[-2..-1]
-        logInfo "### updating settings for child device ${this.device.getData().componentName} ... device #${cmd}"
+        def cmd = "01"
+        def eps = parent?.config()?.numEps
+        logDebug "config().numEps = ${eps}"
+        if (eps > 1) {
+            cmd = this.device.getData().componentName[-2..-1]
+            logInfo "### updating settings for child device ${this.device.getData().componentName} ... device #${cmd}"
+        }
+        else {    // single EP device
+            logInfo "### updating settings for device ${device.getDataValue("manufacturer")} ${config()}"
+        }
         // minLevel
         Integer value = Math.round(this.minLevel * 10)
         def dpValHex  = zigbee.convertToHexString(value as int, 8) 
-        log.trace "updated() minLevel value = $value"
+        logDebug "updated() minLevel value = ${this.minLevel} (raw=$value)"
         def dpCommand = cmd == "01" ? "03" : cmd == "02" ? "09" : cmd == "03" ? "11" : null
         logDebug "sending minLevel command=${dpCommand} value=${value} ($dpValHex)"
-        cmdsTuya += parent?.sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
+        if (isParent()) cmdsTuya += sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
+        else cmdsTuya += parent?.sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
         // maxLevel
         value = Math.round(this.maxLevel * 10)
         dpValHex  = zigbee.convertToHexString(value as int, 8) 
-        log.trace "updated() maxLevel value = $value"
+        logDebug "updated() maxLevel  value = ${this.maxLevel} (raw=$value)"
         dpCommand = cmd == "01" ? "05" : cmd == "02" ? "0B" : cmd == "03" ? "13" : null
         logDebug "sending maxLevel command=${dpCommand} value=${value} ($dpValHex)"
-        cmdsTuya += parent?.sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
+        if (isParent()) cmdsTuya += sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
+        else cmdsTuya += parent?.sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
         //
         hubitat.device.HubMultiAction allActions = new hubitat.device.HubMultiAction()
         cmdsTuya.each {
@@ -233,10 +243,10 @@ def updated() {
         sendHubCommand(allActions)        
     }
     if (isParent()) {
-        logInfo "updated parent->child"
+        logDebug "updated parent->child"
         getChildByEndpointId(indexToEndpointId(0)).onParentSettingsChange(settings)
     } else {
-        logInfo "updated child->parent"
+        logDebug "updated child->parent"
         parent?.onChildSettingsChange(device.deviceNetworkId, settings)
     }
     return initialized()
@@ -353,9 +363,11 @@ def onParentSettingsChange(parentSettings) {
     device.updateSetting("minLevel",parentSettings.minLevel)
     device.updateSetting("maxLevel",parentSettings.maxLevel)
     device.updateSetting("autoOn",parentSettings.autoOn)
+    /*
     if (isTS0601()) {
         logWarn "Min/Max levels NOT changed on the parent device"
     }
+*/
 }
  
 /*
@@ -613,21 +625,21 @@ def parseTuyaCluster( descMap ) {
         case "02" : // Brightness1 (switch level state)
         case "08" : // Brightness2
         case "10" : // Brightness3
-            logDebug "Tuya Brighntness cmd=${cmd} value=${value}"
+            logDebug "received: Tuya brighntness(level) cmd=${cmd} value=${value}"
             handleTuyaClusterBrightnessCmd(cmd, value/10 as int)
             break        
         case "03" : // Minimum brightness1
         case "09" : // Minimum brightness2
         case "11" : // Minimum brightness3
             def switchNumber = cmd == "03" ? "01" : cmd == "09" ? "02" : cmd == "11" ? "03" : null
-            //logDebug "Minimum brightness ${switchNumber} is ${value/10 as int}"
+            logDebug "received: minimum brightness switch#${switchNumber} is ${value/10 as int} (raw=${value})"
             handleTuyaClusterMinBrightnessCmd(cmd, value/10 as int)
             break
         case "05" : // Maximum brightness1
         case "0B" : // Maximum brightness2
         case "13" : // Maximum brightness3
             def switchNumber = cmd == "05" ? "01" : cmd == "0B" ? "02" : cmd == "13" ? "03" : null
-            //logDebug "Maximum brightness ${switchNumber} is ${value/10 as int}"
+            logDebug "received: maximum brightness switch#${switchNumber} is ${value/10 as int} (raw=${value})"
             handleTuyaClusterMaxBrightnessCmd(cmd, value/10 as int)
             break
         case "06" : // Countdown1
@@ -669,15 +681,17 @@ def parseBasicCluster( descMap ) {
 def handleTuyaClusterSwitchCmd(cmd,value) {
     def switchNumber = cmd == "01" ? "01" : cmd == "07" ? "02" : cmd == "0F" ? "03" : null
     logInfo "Switch ${switchNumber} is ${value==0 ? "off" : "on"}"
-    def child = getChildByEndpointId(switchNumber)
-    def isFirst = 0 == endpointIdToIndex(switchNumber)
-    child.onSwitchState(value)
-    if (isFirst && child != this) {
-        logDebug "Replicating switchState in parent"
+    if (config().numEps == 1) {
         onSwitchState(value)
     }
     else {
-       // logDebug "${isFirst} ${this} ${child} ${value}"
+        def child = getChildByEndpointId(switchNumber)
+        def isFirst = 0 == endpointIdToIndex(switchNumber)
+        child.onSwitchState(value)
+        if (isFirst && child != this) {
+            logDebug "Replicating switchState in parent"
+            onSwitchState(value)
+        }
     }
 }
 
@@ -685,43 +699,55 @@ def handleTuyaClusterBrightnessCmd(cmd, value) {
     def switchNumber = cmd == "02" ? "01" : cmd == "08" ? "02" : cmd == "10" ? "03" : null
     scaledValue = valueToLevel(value)
     logInfo "Brightness ${switchNumber} is ${scaledValue}% (${value})"
-    def child = getChildByEndpointId(switchNumber)
-    def isFirst = 0 == endpointIdToIndex(switchNumber)
-    child.onSwitchLevel(value)
-    if (isFirst && child != this) {
-        logDebug "Replicating switchLevel in parent"
+    if (config().numEps == 1)  {
         onSwitchLevel(value)
     }
     else {
-       // logDebug "${isFirst} ${this} ${child} ${value}"
+        def child = getChildByEndpointId(switchNumber)
+        def isFirst = 0 == endpointIdToIndex(switchNumber)
+        child.onSwitchLevel(value)
+        if (isFirst && child != this) {
+            logDebug "Replicating switchLevel in parent"
+            onSwitchLevel(value)
+        }
     }
 }
 
 def handleTuyaClusterMinBrightnessCmd(cmd, value) {
     def switchNumber = cmd == "03" ? "01" : cmd == "09" ? "02" : cmd == "11" ? "03" : null
-    def child = getChildByEndpointId(switchNumber)
-    log.trace "cmd=${cmd} switchNumber=${switchNumber} child = ${child}"
-    def isFirst = 0 == endpointIdToIndex(switchNumber)
-    //
-    child.updateSetting("minLevel", [value: value , type:"number"])
-    logInfo "minLevel brightness parameter for switch #${switchNumber} was updated to ${value}%"
-    if (isFirst && child != this) {
-        logDebug "Replicating minBrightness in parent"
+    if (config().numEps == 1) {
         device.updateSetting("minLevel", [value: value , type:"number"])
+        logInfo "minLevel brightness parameter was updated to ${value}%"
+    }
+    else {
+        def child = getChildByEndpointId(switchNumber)
+        logDebug "cmd=${cmd} switchNumber=${switchNumber} child = ${child}"
+        def isFirst = 0 == endpointIdToIndex(switchNumber)
+        child.updateSetting("minLevel", [value: value , type:"number"])
+        logInfo "minLevel brightness parameter for switch #${switchNumber} was updated to ${value}%"
+        if (isFirst && child != this) {
+            logDebug "Replicating minBrightness in parent"
+            device.updateSetting("minLevel", [value: value , type:"number"])
+        }
     }
 }
 
 def handleTuyaClusterMaxBrightnessCmd(cmd, value) {
     def switchNumber = cmd == "05" ? "01" : cmd == "0B" ? "02" : cmd == "13" ? "03" : null
-    def child = getChildByEndpointId(switchNumber)
-    log.trace "child = ${child}"
-    def isFirst = 0 == endpointIdToIndex(switchNumber)
-    //
-    child.updateSetting("maxLevel", [value: value , type:"number"])
-    logInfo "maxLevel brightness parameter for switch #${switchNumber} was updated to ${value}%"
-    if (isFirst && child != this) {
-        logDebug "Replicating maxBrightness in parent"
+    if (config().numEps == 1) {
         device.updateSetting("maxLevel", [value: value , type:"number"])
+        logInfo "maxLevel brightness parameter was updated to ${value}%"
+    }
+    else {
+        def child = getChildByEndpointId(switchNumber)
+        logDebug "child = ${child}"
+        def isFirst = 0 == endpointIdToIndex(switchNumber)
+        child.updateSetting("maxLevel", [value: value , type:"number"])
+        logInfo "maxLevel brightness parameter for switch #${switchNumber} was updated to ${value}%"
+        if (isFirst && child != this) {
+            logDebug "Replicating maxBrightness in parent"
+            device.updateSetting("maxLevel", [value: value , type:"number"])
+        }
     }
 }
 
@@ -778,7 +804,6 @@ def onSwitchState(value) {
 }
 
 def onSwitchLevel(value) {
-    logDebug "onSwitchLevel: value=${value}"
     def level = valueToLevel(value.toInteger())
     logDebug "onSwitchLevel: Value=${value} level=${level} (value=${value})"
     
