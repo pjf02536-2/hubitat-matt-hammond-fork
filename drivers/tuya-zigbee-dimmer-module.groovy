@@ -45,12 +45,12 @@ ver 0.2.3 08/30/2022 kkossev      - added TS110E _TZ3210_ngqk6jia fingerprint
 ver 0.2.4 09/19/2022 kkossev      - added TS0601 _TZE200_w4cryh2i fingerprint
 ver 0.2.5 10/19/2022 kkossev      - TS0601 level control; infoLogging
 ver 0.2.6 10/22/2022 kkossev      - importURL to dev. branch; toggle() for TS0601; 'autoOn' for TS0601; level scaling for TS0601; minLevel and maxLevel receive/send for TS0601; bugfixes for TS0601 single EP devices
-ver 0.2.7 11/07/2022 kkossev      - (dev. branch) added _TZE200_ip2akl4w _TZE200_1agwnems _TZE200_la2c2uo9 _TZE200_579lguh2 _TZE200_fjjbhx9d
+ver 0.2.7 11/11/2022 kkossev      - added _TZE200_ip2akl4w _TZE200_1agwnems _TZE200_la2c2uo9 _TZE200_579lguh2 _TZE200_fjjbhx9d _TZE200_drs6j6m5; secure the while loops coode when deleting and creating child devices;
 
 */
 
 def version() { "0.2.7" }
-def timeStamp() {"2022/11/07 8:15 PM"}
+def timeStamp() {"2022/11/11 4:10 PM"}
 
 import groovy.transform.Field
 
@@ -78,7 +78,8 @@ import groovy.transform.Field
     "_TZE200_1agwnems": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Moes Zigbee 1-Gang Dimmer module" ],                  // not tested
     "_TZE200_la2c2uo9": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Moes Zigbee 1-Gang Dimmer module" ],                  // not tested
     "_TZE200_579lguh2": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Moes Zigbee 1-Gang Dimmer module" ],                  // not tested
-    "_TZE200_fjjbhx9d": [ numEps: 2, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Moes Zigbee 2-Gang Dimmer module" ]                  // https://community.hubitat.com/t/tuya-moes-1-2-3-gang-dimmer/104596/5?u=kkossev 
+    "_TZE200_fjjbhx9d": [ numEps: 2, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Moes Zigbee 2-Gang Dimmer module" ],                  // https://community.hubitat.com/t/tuya-moes-1-2-3-gang-dimmer/104596/5?u=kkossev 
+    "_TZE200_drs6j6m5": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Lifud Model LF-AAZ030-0750-42" ]                      // https://community.hubitat.com/t/tuya-moes-1-2-3-gang-dimmer/104596/25?u=kkossev
 ]
     
 def config() {
@@ -295,22 +296,32 @@ def createChildDevices() {
     if (numEps == 1) {
         numEps = 0
     }
+    logDebug "about to delete ${numEps} expected child devices, actually found ${getChildDevices().size()}"
     
-    while (getChildDevices().size() > numEps) {
-        // delete child device
-        def i = getChildDevices().size()-1
-        def dni = indexToChildDni(i)
-        
-        logInfo "Deleting child ${i}"
-        deleteChildDevice(dni)
+    for (int i=0; i<numEps; i++) {
+        def index = getChildDevices().size()-1
+        if (index == null) {
+            logDebug "no child devices to delete!"
+            break
+        }
+        def dni = indexToChildDni(index)
+        if (dni != null) {
+            logInfo "Deleting child ${i} with dni ${dni}"
+            deleteChildDevice(dni)    
+        }
+        else {
+            logDebug "child device ${i} DNI was not found!"
+        }
     }
-           
-    while (getChildDevices().size() < numEps) {
+    
+
+    logDebug "about to create ${numEps} child devices"   
+    for (int i=0; i<numEps; i++) {
         // create child devices
-        def i = getChildDevices().size()
-        def endpointId = indexToEndpointId(i)
-        def dni = indexToChildDni(i)
-        logInfo "Creating child ${i} with dni ${dni}"
+        def index = getChildDevices().size()
+        def endpointId = indexToEndpointId(index)
+        def dni = indexToChildDni(index)
+        logInfo "Creating child ${index} with dni ${dni}"
         
         addChildDevice(
             "Tuya Zigbee dimmer module",
@@ -318,12 +329,12 @@ def createChildDevices() {
             [
                 completedSetup: true,
                 label: "${device.displayName} (CH${endpointId})",
-                isComponent: true,
+                isComponent:true,
                 componentName: "ch${endpointId}",
                 componentLabel: "Channel ${endpointId}"
             ]
         )
-    }               
+    }
 }
 
 
