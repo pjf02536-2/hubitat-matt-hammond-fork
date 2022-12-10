@@ -51,14 +51,14 @@ ver 0.2.9 12/10/2022 kkossev      - (dev.branch) deleting child devices bug fix;
 */
 
 def version() { "0.2.9" }
-def timeStamp() {"2022/12/10 8:33 PM"}
+def timeStamp() {"2022/12/10 9:09 PM"}
 
 import groovy.transform.Field
 
 @Field static final Boolean debug = false
 @Field static final Boolean deviceSimulation = false
 @Field static final String  simulatedModel = "TS0601"
-@Field static final String  simulatedManufacturer = "_TZE200_ip2akl4w"
+@Field static final String  simulatedManufacturer = "_TZE200_fvldku9h"
 
 @Field static def modelConfigs = [
     "_TYZB01_v8gtiaed": [ numEps: 2, model: "TS110F", inClusters: "0000,0004,0005,0006,0008",     joinName: "Tuya Zigbee 2-Gang Dimmer module" ],                // '2 gang smart dimmer switch module with neutral'
@@ -513,6 +513,10 @@ def cmdSetLevel(String childDni, value, duration) {
         def dpValHex  = zigbee.convertToHexString(value as int, 8) 
         def cmd = childDni[-2..-1]
         def dpCommand = cmd == "01" ? "02" : cmd == "02" ? "08" : cmd == "03" ? "10" : null
+        if (device.getDataValue("manufacturer") == "_TZE200_fvldku9h") {
+            dpCommand = "04"
+            dpValHex  = zigbee.convertToHexString((value/10) as int, 8) 
+        }
         logDebug "${device.displayName}  sending cmdSetLevel command=${dpCommand} value=${value} ($dpValHex)"
         cmdsTuya = sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
         if (child.isAutoOn() && device.currentState('switch', true).value != 'on') {
@@ -682,8 +686,8 @@ def parseTuyaCluster( descMap ) {
             def switchNumber = cmd == "06" ? "01" : cmd == "0C" ? "02" : cmd == "14" ? "03" : null
             logInfo "Countdown ${switchNumber} is ${value}s"
             break
-        case "04" : // (04)
-            logDebug "Unknown Tuya dp= ${cmd} fn=${value}"
+        case "04" : // (04) level for _TZE200_fvldku9h
+            handleTuyaClusterBrightnessCmd(cmd, value as int)
             break
         case "0A" : // (10)
             logDebug "Unknown Tuya dp= ${cmd} fn=${value}"
@@ -742,7 +746,7 @@ def handleTuyaClusterSwitchCmd(cmd,value) {
 }
 
 def handleTuyaClusterBrightnessCmd(cmd, value) {
-    def switchNumber = cmd == "02" ? "01" : cmd == "08" ? "02" : cmd == "10" ? "03" : null
+    def switchNumber = cmd == "02" ? "01" : cmd == "08" ? "02" : cmd == "10" ? "03" : "01"
     scaledValue = valueToLevel(value)
     logInfo "Brightness ${switchNumber} is ${scaledValue}% (${value})"
     if (config().numEps == 1)  {
