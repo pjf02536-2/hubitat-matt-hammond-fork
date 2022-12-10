@@ -65,7 +65,7 @@ import groovy.transform.Field
     "_TZ3000_ktuoyvt5": [ numEps: 1, model: "TS110F", inClusters: "0000,0004,0005,0006,0008",     joinName: "Tuya Zigbee 1-Gang Switch module" ],                // '1 gang smart        switch module without neutral'
     "_TZ3000_92chsky7": [ numEps: 2, model: "TS110F", inClusters: "0000,0004,0005,0006,0008",     joinName: "Tuya Zigbee 2-Gang Dimmer module (no-neutral)" ],   // '2 gang smart dimmer switch module without neutral'
     "_TZ3000_7ysdnebc": [ numEps: 2, model: "TS110F", inClusters: "0000,0004,0005,0003,0006,0008",joinName: "Tuya 2CH Zigbee dimmer module" ],
-    "_TZE200_vm1gyrso": [ numEps: 3, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 3-Gang Dimmer module" ],    
+    "_TZE200_vm1gyrso": [ numEps: /*3*/3, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 3-Gang Dimmer module" ],    
     "_TZE200_whpb9yts": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 1-Gang Dimmer module" ],                // 'Zigbee smart dimmer'
     "_TZE200_ebwgzdqq": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 1-Gang Dimmer module" ],    
     "_TZE200_9i9dt8is": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 1-Gang Dimmer module" ],    
