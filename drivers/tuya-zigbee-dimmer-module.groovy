@@ -46,18 +46,19 @@ ver 0.2.4 09/19/2022 kkossev      - added TS0601 _TZE200_w4cryh2i fingerprint
 ver 0.2.5 10/19/2022 kkossev      - TS0601 level control; infoLogging
 ver 0.2.6 10/22/2022 kkossev      - importURL to dev. branch; toggle() for TS0601; 'autoOn' for TS0601; level scaling for TS0601; minLevel and maxLevel receive/send for TS0601; bugfixes for TS0601 single EP devices
 ver 0.2.7 11/11/2022 kkossev      - added _TZE200_ip2akl4w _TZE200_1agwnems _TZE200_la2c2uo9 _TZE200_579lguh2 _TZE200_fjjbhx9d _TZE200_drs6j6m5; secure the while loops coode when deleting and creating child devices;
-
+ver 0.2.8 11/13/2022 kkossev      - _TZE200_ip2akl4w fingerprint hardcoded
+ver 0.2.9 12/10/2022 kkossev      - (dev.branch) deleting child devices bug fix; added _TZE200_fvldku9h Tuya Fan Switch; unscheduling old periodic jobs; Tuya Time Sync';
 */
 
-def version() { "0.2.7" }
-def timeStamp() {"2022/11/11 4:10 PM"}
+def version() { "0.2.9" }
+def timeStamp() {"2022/12/10 9:09 PM"}
 
 import groovy.transform.Field
 
 @Field static final Boolean debug = false
 @Field static final Boolean deviceSimulation = false
 @Field static final String  simulatedModel = "TS0601"
-@Field static final String  simulatedManufacturer = "_TZE200_w4cryh2i"
+@Field static final String  simulatedManufacturer = "_TZE200_fvldku9h"
 
 @Field static def modelConfigs = [
     "_TYZB01_v8gtiaed": [ numEps: 2, model: "TS110F", inClusters: "0000,0004,0005,0006,0008",     joinName: "Tuya Zigbee 2-Gang Dimmer module" ],                // '2 gang smart dimmer switch module with neutral'
@@ -79,7 +80,8 @@ import groovy.transform.Field
     "_TZE200_la2c2uo9": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Moes Zigbee 1-Gang Dimmer module" ],                  // not tested
     "_TZE200_579lguh2": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Moes Zigbee 1-Gang Dimmer module" ],                  // not tested
     "_TZE200_fjjbhx9d": [ numEps: 2, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Moes Zigbee 2-Gang Dimmer module" ],                  // https://community.hubitat.com/t/tuya-moes-1-2-3-gang-dimmer/104596/5?u=kkossev 
-    "_TZE200_drs6j6m5": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Lifud Model LF-AAZ030-0750-42" ]                      // https://community.hubitat.com/t/tuya-moes-1-2-3-gang-dimmer/104596/25?u=kkossev
+    "_TZE200_drs6j6m5": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Lifud Model LF-AAZ030-0750-42" ],                     // https://community.hubitat.com/t/tuya-moes-1-2-3-gang-dimmer/104596/25?u=kkossev
+    "_TZE200_fvldku9h": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Fan Switch" ]                                    // https://www.aliexpress.com/item/4001242513879.html
 ]
     
 def config() {
@@ -121,6 +123,8 @@ metadata {
                 [name:"dpType",    type: "ENUM",   constraints: ["DP_TYPE_VALUE", "DP_TYPE_BOOL", "DP_TYPE_ENUM"], description: "DP data type"] 
             ]
         }
+        
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0004,0005,EF00,0000", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_ip2akl4w"
         
         modelConfigs.each{ data ->
             fingerprint profileId: "0104",
@@ -266,6 +270,7 @@ def initialized() {
         device.updateDataValue("manufacturer", simulatedManufacturer)
         logDebug "device simulation: ${simulatedModel} ${simulatedManufacturer}"
     }
+    unschedule() // added 12/10/2022
     logDebug "initialized() device.getData() = ${device.getData()}"
     
     if (isParent()) {
@@ -297,32 +302,30 @@ def createChildDevices() {
         numEps = 0
     }
     logDebug "about to delete ${numEps} expected child devices, actually found ${getChildDevices().size()}"
-    
-    for (int i=0; i<numEps; i++) {
-        def index = getChildDevices().size()-1
-        if (index == null) {
-            logDebug "no child devices to delete!"
-            break
-        }
-        def dni = indexToChildDni(index)
-        if (dni != null) {
-            logInfo "Deleting child ${i} with dni ${dni}"
-            deleteChildDevice(dni)    
-        }
-        else {
-            logDebug "child device ${i} DNI was not found!"
+
+    def index = getChildDevices().size()
+    if (index == null) {
+        logDebug "no child devices to delete!"
+    }
+    else {
+        for (int i=0; i<index; i++) {
+            def dni = indexToChildDni(i)
+            if (dni != null) {
+                logInfo "Deleting child ${i} with dni ${dni}"
+                deleteChildDevice(dni)    
+            }
+            else {
+                logDebug "child device ${i} DNI was not found!"
+            }
         }
     }
     
-
     logDebug "about to create ${numEps} child devices"   
     for (int i=0; i<numEps; i++) {
         // create child devices
-        def index = getChildDevices().size()
-        def endpointId = indexToEndpointId(index)
-        def dni = indexToChildDni(index)
-        logInfo "Creating child ${index} with dni ${dni}"
-        
+        def dni = indexToChildDni(i)
+        def endpointId = indexToEndpointId(i)
+        logInfo "Creating child ${i} with dni ${dni}"
         addChildDevice(
             "Tuya Zigbee dimmer module",
             dni,
@@ -510,6 +513,10 @@ def cmdSetLevel(String childDni, value, duration) {
         def dpValHex  = zigbee.convertToHexString(value as int, 8) 
         def cmd = childDni[-2..-1]
         def dpCommand = cmd == "01" ? "02" : cmd == "02" ? "08" : cmd == "03" ? "10" : null
+        if (device.getDataValue("manufacturer") == "_TZE200_fvldku9h") {
+            dpCommand = "04"
+            dpValHex  = zigbee.convertToHexString((value/10) as int, 8) 
+        }
         logDebug "${device.displayName}  sending cmdSetLevel command=${dpCommand} value=${value} ($dpValHex)"
         cmdsTuya = sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
         if (child.isAutoOn() && device.currentState('switch', true).value != 'on') {
@@ -631,6 +638,20 @@ def parseTuyaCluster( descMap ) {
         logDebug "Tuya command 0x0B data=${descMap.data}"
         return null
     }
+    if (descMap.command == "24") {
+        logDebug "Tuya Time Sync request data=${descMap.data}"
+        def offset = 0
+        try {
+            offset = location.getTimeZone().getOffset(new Date().getTime())
+        }
+        catch(e) {
+            logWarn "Cannot resolve current location. please set location in Hubitat location setting. Setting timezone offset to zero"
+        }
+        def cmds = zigbee.command(0xEF00, 0x24, "0008" +zigbee.convertToHexString((int)(now()/1000),8) +  zigbee.convertToHexString((int)((now()+offset)/1000), 8))
+        logDebug "sending time data : ${cmds}"
+        cmds.each{ sendHubCommand(new hubitat.device.HubAction(it, hubitat.device.Protocol.ZIGBEE)) }
+        return null
+    }
     def cmd = descMap.data[2]
     def value = getAttributeValue(descMap.data)
     switch (cmd) {
@@ -665,14 +686,26 @@ def parseTuyaCluster( descMap ) {
             def switchNumber = cmd == "06" ? "01" : cmd == "0C" ? "02" : cmd == "14" ? "03" : null
             logInfo "Countdown ${switchNumber} is ${value}s"
             break
-        case "OE" : //14
+        case "04" : // (04) level for _TZE200_fvldku9h
+            handleTuyaClusterBrightnessCmd(cmd, value as int)
+            break
+        case "0A" : // (10)
+            logDebug "Unknown Tuya dp= ${cmd} fn=${value}"
+            break
+        case "0E" : // (14)
             logInfo "Power-on Status Setting is ${value}"
             break
-        case "15" : //21
+        case "12" : // (18)
+            logDebug "Unknown Tuya dp= ${cmd} fn=${value}"
+            break
+        case "15" : // (21)
             logInfo "Light Mode is ${value}"
             break
-        case "1A" : //26
+        case "1A" : // (26)
             logInfo "Switch backlight ${value}"
+            break
+        case "40" : // (64)
+            logDebug "Unknown Tuya dp= ${cmd} fn=${value}"
             break
         default :
             logWarn "UNHANDLED Tuya cmd=${cmd} value=${value}"
@@ -713,7 +746,7 @@ def handleTuyaClusterSwitchCmd(cmd,value) {
 }
 
 def handleTuyaClusterBrightnessCmd(cmd, value) {
-    def switchNumber = cmd == "02" ? "01" : cmd == "08" ? "02" : cmd == "10" ? "03" : null
+    def switchNumber = cmd == "02" ? "01" : cmd == "08" ? "02" : cmd == "10" ? "03" : "01"
     scaledValue = valueToLevel(value)
     logInfo "Brightness ${switchNumber} is ${scaledValue}% (${value})"
     if (config().numEps == 1)  {
