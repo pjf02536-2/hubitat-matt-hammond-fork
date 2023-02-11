@@ -38,21 +38,22 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -----------------------------------------------------------------------------
-ver 0.2.0 11/12/2021 Matt Hammond - added _TZ3000_7ysdnebc
-ver 0.2.1 12/29/2021 kkossev      - added cluster 0003 to the fingerprint, model _TZ3000_7ysdnebc
-ver 0.2.2 05/28/2022 kkossev      - moved model and inClusters to modelConfigs, added _TZE200_vm1gyrso 3-Gang Dimmer module
-ver 0.2.3 08/30/2022 kkossev      - added TS110E _TZ3210_ngqk6jia fingerprint
-ver 0.2.4 09/19/2022 kkossev      - added TS0601 _TZE200_w4cryh2i fingerprint
-ver 0.2.5 10/19/2022 kkossev      - TS0601 level control; infoLogging
-ver 0.2.6 10/22/2022 kkossev      - importURL to dev. branch; toggle() for TS0601; 'autoOn' for TS0601; level scaling for TS0601; minLevel and maxLevel receive/send for TS0601; bugfixes for TS0601 single EP devices
-ver 0.2.7 11/11/2022 kkossev      - added _TZE200_ip2akl4w _TZE200_1agwnems _TZE200_la2c2uo9 _TZE200_579lguh2 _TZE200_fjjbhx9d _TZE200_drs6j6m5; secure the while loops coode when deleting and creating child devices;
-ver 0.2.8 11/13/2022 kkossev      - _TZE200_ip2akl4w fingerprint hardcoded
-ver 0.2.9 12/10/2022 kkossev      - deleting child devices bug fix; added _TZE200_fvldku9h Tuya Fan Switch; unscheduling old periodic jobs; Tuya Time Sync';
-ver 0.2.10 01/02/2023 kkossev      - added _TZE200_e3oitdyu 
+ver 0.2.0  11/12/2021 Matt Hammond - added _TZ3000_7ysdnebc
+ver 0.2.1  2021/12/29 kkossev      - added cluster 0003 to the fingerprint, model _TZ3000_7ysdnebc
+ver 0.2.2  2022/05/28 kkossev      - moved model and inClusters to modelConfigs, added _TZE200_vm1gyrso 3-Gang Dimmer module
+ver 0.2.3  2022/08/30 kkossev      - added TS110E _TZ3210_ngqk6jia fingerprint
+ver 0.2.4  2022/09/19 kkossev      - added TS0601 _TZE200_w4cryh2i fingerprint
+ver 0.2.5  2022/10/19 kkossev      - TS0601 level control; infoLogging
+ver 0.2.6  2022/10/22 kkossev      - importURL to dev. branch; toggle() for TS0601; 'autoOn' for TS0601; level scaling for TS0601; minLevel and maxLevel receive/send for TS0601; bugfixes for TS0601 single EP devices
+ver 0.2.7  2022/11/11 kkossev      - added _TZE200_ip2akl4w _TZE200_1agwnems _TZE200_la2c2uo9 _TZE200_579lguh2 _TZE200_fjjbhx9d _TZE200_drs6j6m5; secure the while loops coode when deleting and creating child devices;
+ver 0.2.8  2022/11/13 kkossev      - _TZE200_ip2akl4w fingerprint hardcoded
+ver 0.2.9  2022/12/10 kkossev      - deleting child devices bug fix; added _TZE200_fvldku9h Tuya Fan Switch; unscheduling old periodic jobs; Tuya Time Sync';
+ver 0.2.10 2023/01/02 kkossev      - added _TZE200_e3oitdyu 
+ver 0.2.11 2023/02/11 kkossev      - (dev.branch) added TS110E _TZ3210_k1msuvg6 
 */
 
-def version() { "0.2.10" }
-def timeStamp() {"2023/02/01 1:10 PM"}
+def version() { "0.2.11" }
+def timeStamp() {"2023/02/11 9:59 AM"}
 
 import groovy.transform.Field
 
@@ -83,7 +84,8 @@ import groovy.transform.Field
     "_TZE200_fjjbhx9d": [ numEps: 2, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Moes Zigbee 2-Gang Dimmer module" ],                  // https://community.hubitat.com/t/tuya-moes-1-2-3-gang-dimmer/104596/5?u=kkossev 
     "_TZE200_drs6j6m5": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Lifud Model LF-AAZ030-0750-42" ],                     // https://community.hubitat.com/t/tuya-moes-1-2-3-gang-dimmer/104596/25?u=kkossev
     "_TZE200_fvldku9h": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Fan Switch" ] ,                                  // https://www.aliexpress.com/item/4001242513879.html
-    "_TZE200_e3oitdyu": [ numEps: 2, model: "TS110E", inClusters: "0000,0004,0005,EF00",          joinName: "Moes ZigBee Dimmer Switche 2CH"]                      // https://community.hubitat.com/t/moes-dimmer-module-2ch/110512 
+    "_TZE200_e3oitdyu": [ numEps: 2, model: "TS110E", inClusters: "0000,0004,0005,EF00",          joinName: "Moes ZigBee Dimmer Switche 2CH"],                     // https://community.hubitat.com/t/moes-dimmer-module-2ch/110512 
+    "_TZ3210_k1msuvg6": [ numEps: 1, model: "TS110E", inClusters: "0004,0005,0003,0006,0008,EF00,0000", joinName: "Tuya Zigbee 1-Gang Dimmer module"]               // https://community.hubitat.com/t/girier-tuya-zigbee-3-0-light-switch-module-smart-diy-breaker-1-2-3-4-gang-supports-2-way-control/104546/36?u=kkossev
 ]
     
 def config() {
