@@ -49,11 +49,11 @@ ver 0.2.7  2022/11/11 kkossev      - added _TZE200_ip2akl4w _TZE200_1agwnems _TZ
 ver 0.2.8  2022/11/13 kkossev      - _TZE200_ip2akl4w fingerprint hardcoded
 ver 0.2.9  2022/12/10 kkossev      - deleting child devices bug fix; added _TZE200_fvldku9h Tuya Fan Switch; unscheduling old periodic jobs; Tuya Time Sync';
 ver 0.2.10 2023/01/02 kkossev      - added _TZE200_e3oitdyu 
-ver 0.2.11 2023/02/19 kkossev      - (dev.branch) added TS110E _TZ3210_k1msuvg6; TS0601 _TZE200_r32ctezx fan controller; changed importURL to dev. branch
+ver 0.2.11 2023/02/19 kkossev      - (dev.branch) added TS110E _TZ3210_k1msuvg6; TS0601 _TZE200_r32ctezx fan controller; changed importURL to dev. branch; dp=4 - type of light source?
 */
 
 def version() { "0.2.11" }
-def timeStamp() {"2023/02/19 9:01 AM"}
+def timeStamp() {"2023/02/19 9:20 AM"}
 
 import groovy.transform.Field
 
@@ -102,6 +102,7 @@ def isTS0601() {
     }
 }
 
+def isFanController() {device.getDataValue("manufacturer") in ["_TZE200_fvldku9h", "_TZE200_r32ctezx"]}
 
 metadata {
     definition (
@@ -691,8 +692,12 @@ def parseTuyaCluster( descMap ) {
             def switchNumber = cmd == "06" ? "01" : cmd == "0C" ? "02" : cmd == "14" ? "03" : null
             logInfo "Countdown ${switchNumber} is ${value}s"
             break
-        case "04" : // (04) level for _TZE200_fvldku9h
-            handleTuyaClusterBrightnessCmd(cmd, value as int)
+        case "04" : // (04) level for _TZE200_fvldku9h ;  Tuya type of light source for all others?
+            if (isFanController()) {
+                handleTuyaClusterBrightnessCmd(cmd, value as int)
+            } else {
+                logDebug "received: Tuya type of light source cmd=${cmd} value=${value}"    // (LED, halogen, incandescent)
+            }
             break
         case "0A" : // (10)
             logDebug "Unknown Tuya dp= ${cmd} fn=${value}"
