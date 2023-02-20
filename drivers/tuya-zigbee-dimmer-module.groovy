@@ -49,7 +49,7 @@ ver 0.2.7  2022/11/11 kkossev      - added _TZE200_ip2akl4w _TZE200_1agwnems _TZ
 ver 0.2.8  2022/11/13 kkossev      - _TZE200_ip2akl4w fingerprint hardcoded
 ver 0.2.9  2022/12/10 kkossev      - deleting child devices bug fix; added _TZE200_fvldku9h Tuya Fan Switch; unscheduling old periodic jobs; Tuya Time Sync';
 ver 0.2.10 2023/01/02 kkossev      - added _TZE200_e3oitdyu 
-ver 0.2.11 2023/02/19 kkossev      - (dev.branch) added TS110E _TZ3210_k1msuvg6; TS0601 _TZE200_r32ctezx fan controller; changed importURL to dev. branch; dp=4 - type of light source?; added GLEDOPTO GL-SD-001; 1-gang modles bug fixes;
+ver 0.2.11 2023/02/19 kkossev      -  added TS110E _TZ3210_k1msuvg6; TS0601 _TZE200_r32ctezx fan controller; changed importURL to dev. branch; dp=4 - type of light source?; added GLEDOPTO GL-SD-001; 1-gang modles bug fixes;
 */
 
 def version() { "0.2.11" }
