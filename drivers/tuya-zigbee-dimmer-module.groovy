@@ -38,21 +38,22 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -----------------------------------------------------------------------------
-ver 0.2.0 11/12/2021 Matt Hammond - added _TZ3000_7ysdnebc
-ver 0.2.1 12/29/2021 kkossev      - added cluster 0003 to the fingerprint, model _TZ3000_7ysdnebc
-ver 0.2.2 05/28/2022 kkossev      - moved model and inClusters to modelConfigs, added _TZE200_vm1gyrso 3-Gang Dimmer module
-ver 0.2.3 08/30/2022 kkossev      - added TS110E _TZ3210_ngqk6jia fingerprint
-ver 0.2.4 09/19/2022 kkossev      - added TS0601 _TZE200_w4cryh2i fingerprint
-ver 0.2.5 10/19/2022 kkossev      - TS0601 level control; infoLogging
-ver 0.2.6 10/22/2022 kkossev      - importURL to dev. branch; toggle() for TS0601; 'autoOn' for TS0601; level scaling for TS0601; minLevel and maxLevel receive/send for TS0601; bugfixes for TS0601 single EP devices
-ver 0.2.7 11/11/2022 kkossev      - added _TZE200_ip2akl4w _TZE200_1agwnems _TZE200_la2c2uo9 _TZE200_579lguh2 _TZE200_fjjbhx9d _TZE200_drs6j6m5; secure the while loops coode when deleting and creating child devices;
-ver 0.2.8 11/13/2022 kkossev      - _TZE200_ip2akl4w fingerprint hardcoded
-ver 0.2.9 12/10/2022 kkossev      - deleting child devices bug fix; added _TZE200_fvldku9h Tuya Fan Switch; unscheduling old periodic jobs; Tuya Time Sync';
-ver 0.2.10 01/02/2023 kkossev      - added _TZE200_e3oitdyu 
+ver 0.2.0  11/12/2021 Matt Hammond - added _TZ3000_7ysdnebc
+ver 0.2.1  2021/12/29 kkossev      - added cluster 0003 to the fingerprint, model _TZ3000_7ysdnebc
+ver 0.2.2  2022/05/28 kkossev      - moved model and inClusters to modelConfigs, added _TZE200_vm1gyrso 3-Gang Dimmer module
+ver 0.2.3  2022/08/30 kkossev      - added TS110E _TZ3210_ngqk6jia fingerprint
+ver 0.2.4  2022/09/19 kkossev      - added TS0601 _TZE200_w4cryh2i fingerprint
+ver 0.2.5  2022/10/19 kkossev      - TS0601 level control; infoLogging
+ver 0.2.6  2022/10/22 kkossev      - importURL to dev. branch; toggle() for TS0601; 'autoOn' for TS0601; level scaling for TS0601; minLevel and maxLevel receive/send for TS0601; bugfixes for TS0601 single EP devices
+ver 0.2.7  2022/11/11 kkossev      - added _TZE200_ip2akl4w _TZE200_1agwnems _TZE200_la2c2uo9 _TZE200_579lguh2 _TZE200_fjjbhx9d _TZE200_drs6j6m5; secure the while loops coode when deleting and creating child devices;
+ver 0.2.8  2022/11/13 kkossev      - _TZE200_ip2akl4w fingerprint hardcoded
+ver 0.2.9  2022/12/10 kkossev      - deleting child devices bug fix; added _TZE200_fvldku9h Tuya Fan Switch; unscheduling old periodic jobs; Tuya Time Sync';
+ver 0.2.10 2023/01/02 kkossev      - added _TZE200_e3oitdyu 
+ver 0.2.11 2023/02/19 kkossev      -  added TS110E _TZ3210_k1msuvg6; TS0601 _TZE200_r32ctezx fan controller; changed importURL to dev. branch; dp=4 - type of light source?; added GLEDOPTO GL-SD-001; 1-gang modles bug fixes;
 */
 
-def version() { "0.2.10" }
-def timeStamp() {"2023/02/01 1:10 PM"}
+def version() { "0.2.11" }
+def timeStamp() {"2023/02/19 10:38 PM"}
 
 import groovy.transform.Field
 
@@ -83,7 +84,10 @@ import groovy.transform.Field
     "_TZE200_fjjbhx9d": [ numEps: 2, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Moes Zigbee 2-Gang Dimmer module" ],                  // https://community.hubitat.com/t/tuya-moes-1-2-3-gang-dimmer/104596/5?u=kkossev 
     "_TZE200_drs6j6m5": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Lifud Model LF-AAZ030-0750-42" ],                     // https://community.hubitat.com/t/tuya-moes-1-2-3-gang-dimmer/104596/25?u=kkossev
     "_TZE200_fvldku9h": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Fan Switch" ] ,                                  // https://www.aliexpress.com/item/4001242513879.html
-    "_TZE200_e3oitdyu": [ numEps: 2, model: "TS110E", inClusters: "0000,0004,0005,EF00",          joinName: "Moes ZigBee Dimmer Switche 2CH"]                      // https://community.hubitat.com/t/moes-dimmer-module-2ch/110512 
+    "_TZE200_r32ctezx": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Fan Switch" ],                                   // https://www.aliexpress.us/item/3256804518783061.html https://github.com/Koenkk/zigbee2mqtt/issues/12793
+    "_TZE200_e3oitdyu": [ numEps: 2, model: "TS110E", inClusters: "0000,0004,0005,EF00",          joinName: "Moes ZigBee Dimmer Switche 2CH"],                     // https://community.hubitat.com/t/moes-dimmer-module-2ch/110512 
+    "_TZ3210_k1msuvg6": [ numEps: 1, model: "TS110E", inClusters: "0004,0005,0003,0006,0008,EF00,0000", joinName: "Tuya Zigbee 1-Gang Dimmer module"],               // https://community.hubitat.com/t/girier-tuya-zigbee-3-0-light-switch-module-smart-diy-breaker-1-2-3-4-gang-supports-2-way-control/104546/36?u=kkossev
+    "GLEDOPTO":      [ numEps: 1, model: "GL-SD-001", inClusters: "0000,0003,0004,0005,0006,0008,1000", joinName: "Gledopto Triac Dimmer"]                         //
 ]
     
 def config() {
@@ -99,6 +103,7 @@ def isTS0601() {
     }
 }
 
+def isFanController() {device.getDataValue("manufacturer") in ["_TZE200_fvldku9h", "_TZE200_r32ctezx"]}
 
 metadata {
     definition (
@@ -107,7 +112,7 @@ metadata {
         author: "Matt Hammond",
         description: "Driver for Tuya zigbee dimmer modules",
         documentationLink: "https://github.com/matt-hammond-001/hubitat-code/blob/master/drivers/tuya-zigbee-dimmer-module.README.md",
-        importUrl: "https://raw.githubusercontent.com/kkossev/hubitat-matt-hammond-fork/master/drivers/tuya-zigbee-dimmer-module.groovy"
+        importUrl: "https://raw.githubusercontent.com/kkossev/hubitat-matt-hammond-fork/development/drivers/tuya-zigbee-dimmer-module.groovy"
     ) {
 
         capability "Configuration"
@@ -124,9 +129,10 @@ metadata {
                 [name:"dpValue",   type: "STRING", description: "Tuya DP value", constraints: ["STRING"]],
                 [name:"dpType",    type: "ENUM",   constraints: ["DP_TYPE_VALUE", "DP_TYPE_BOOL", "DP_TYPE_ENUM"], description: "DP data type"] 
             ]
+            command "test", [[name: "test", type: "STRING", description: "test", constraints: ["STRING"]]]
         }
         
-        fingerprint profileId:"0104", endpointId:"01", inClusters:"0004,0005,EF00,0000", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_ip2akl4w"
+        //fingerprint profileId:"0104", endpointId:"01", inClusters:"0004,0005,EF00,0000", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_ip2akl4w"
         
         modelConfigs.each{ data ->
             fingerprint profileId: "0104",
@@ -302,12 +308,14 @@ def createChildDevices() {
     
     if (numEps == 1) {
         numEps = 0
+        logDebug "single channel dimmer, no child devices are needed"
+    } else {
+        logDebug "about to delete the child devices:  ${numEps} expected , found ${getChildDevices().size()}"
     }
-    logDebug "about to delete ${numEps} expected child devices, actually found ${getChildDevices().size()}"
 
     def index = getChildDevices().size()
-    if (index == null) {
-        logDebug "no child devices to delete!"
+    if (index == null || index == 0)   {
+        logDebug "no child devices to be deleted"
     }
     else {
         for (int i=0; i<index; i++) {
@@ -320,6 +328,10 @@ def createChildDevices() {
                 logDebug "child device ${i} DNI was not found!"
             }
         }
+    }
+    if (numEps <= 1) {
+        logDebug "no child devices to be created"
+        return
     }
     
     logDebug "about to create ${numEps} child devices"   
@@ -348,16 +360,21 @@ def listenChildDevices() {
     if (isTS0601()) {
         return null
     }
+    logDebug "listenChildDevices(): getChildEndpointIds() = ${getChildEndpointIds()} size=${getChildEndpointIds().size()}"
     getChildEndpointIds().each{ endpointId ->
-        cmds += [
-            //bindings
-            "zdo bind 0x${device.deviceNetworkId} 0x${endpointId} 0x01 0x0006 {${device.zigbeeId}} {}", "delay 200",
-            "zdo bind 0x${device.deviceNetworkId} 0x${endpointId} 0x01 0x0008 {${device.zigbeeId}} {}", "delay 200",
-            //reporting
-            "he cr 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 0 0x10 0 0xFFFF {}","delay 200",
-            "he cr 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 0 0x20 0 0xFFFF {}", "delay 200",
-        ] + cmdRefresh([endpointId])
+        //logDebug "endpointId = ${endpointId}"
+        if (endpointId != null && endpointId != 0 && endpointId != 0xF2) {
+            cmds += [
+                //bindings
+                "zdo bind 0x${device.deviceNetworkId} 0x${endpointId} 0x01 0x0006 {${device.zigbeeId}} {}", "delay 200",
+                "zdo bind 0x${device.deviceNetworkId} 0x${endpointId} 0x01 0x0008 {${device.zigbeeId}} {}", "delay 200",
+                //reporting
+                "he cr 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 0 0x10 0 0xFFFF {}","delay 200",
+                "he cr 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 0 0x20 0 0xFFFF {}", "delay 200",
+            ] + cmdRefresh(endpointIdToChildDni(endpointId))
+        }
     }
+    logDebug "sending bindings: ${cmds}"
     return cmds
 }
 
@@ -403,8 +420,10 @@ if parent, then act on endpoint 1
 
 def refresh() {
     if (isParent()) {
+        logDebug "refresh(): parent ${indexToChildDni(0)}"
         return cmdRefresh(indexToChildDni(0))
     } else {
+        logDebug "refresh(): child ${device.deviceNetworkId}"
         parent?.doActions( parent?.cmdRefresh(device.deviceNetworkId) )
     }
 }
@@ -454,6 +473,7 @@ Hub Action (cmd) generators
 
 def cmdRefresh(String childDni) {
     def endpointId = childDniToEndpointId(childDni)
+    logDebug "cmdRefresh(childDni=${childDni} endpointId=${endpointId})  isParent()=${isParent()}"
     if (isTS0601()) {
         logWarn "cmdRefresh NOT implemented for TS0601!"
         return null
@@ -483,21 +503,23 @@ def cmdSwitchToggle(String childDni) {
 }
 
 def cmdSwitch(String childDni, onOff) {
-    logDebug "cmdSwitch: childDni=${childDni} onOff=${onOff}"
+    ArrayList<String> cmds = []
     def endpointId = childDniToEndpointId(childDni)
+    logDebug "cmdSwitch: childDni=${childDni} endpointId=${endpointId} onOff=${onOff}"
     onOff = onOff ? "1" : "0"
     
     if (isTS0601()) {
         def dpValHex  = zigbee.convertToHexString(onOff as int, 2) 
         def cmd = childDni[-2..-1]
         def dpCommand = cmd == "01" ? "01" : cmd == "02" ? "07" : cmd == "03" ? "0F" : null
-        logDebug "${device.displayName}  sending cmdSwitch command=${dpCommand} value=${onOff} ($dpValHex)"
-        
-        return sendTuyaCommand(dpCommand, DP_TYPE_BOOL, dpValHex)       
+        cmds = sendTuyaCommand(dpCommand, DP_TYPE_BOOL, dpValHex)       
+        logDebug "${device.displayName}  sending cmdSwitch command=${dpCommand} value=${onOff} ($dpValHex) cmds=${cmds}"
     }
-    return [
-        "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 ${onOff} {}"
-    ]
+    else {
+        cmds = ["he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 ${onOff} {}"]
+        logDebug "${device.displayName}  sending cmdSwitch endpointId=${endpointId} value=${onOff} cmds=${cmds}"
+    }
+   return cmds
 }
 
 def cmdSetLevel(String childDni, value, duration) {
@@ -568,35 +590,47 @@ def parse(String description) {
     logDebug "Received raw: ${description}"
 
     if (isParent()) {
-        def descMap = zigbee.parseDescriptionAsMap(description)
-        logDebug "Received parsed: ${descMap}"
-
+        def descMap = [:]
+        try {
+            descMap = zigbee.parseDescriptionAsMap(description)
+        }
+        catch (e) {
+            logWarn "exception ${e} caught while parsing description:  ${description}"
+        }
+        logDebug "Received descMap: ${descMap}"
         if (description.startsWith("catchall")) {
             logDebug "catchall clusterId=${descMap?.clusterId} command=${descMap?.command} data=${descMap?.data}"
             if (descMap?.clusterId == "EF00") {
                 return parseTuyaCluster(descMap)
             }
+            /*
             else {
                 logWarn "Ignored non-Tuya cluster catchall clusterId=${descMap?.clusterId} command=${descMap?.command} data=${descMap?.data}"
                 return null
             }
+*/
         }
         //
-        try {
-            def value = Integer.parseInt(descMap.value, 16)
+        Integer value = 0
+        if (descMap?.value != null) {
+            value = Integer.parseInt(descMap.value, 16)
         }
-        catch (e) {
-            logWarn "exception caught while parsing description:  ${description}"
-            value = 0
+        def child = this
+        def isFirst = true
+        if (descMap?.endpoint != null) {
+            child = getChildByEndpointId(descMap.endpoint)
+            isFirst = 0 == endpointIdToIndex(descMap.endpoint)
         }
-        def child = getChildByEndpointId(descMap.endpoint)
-        def isFirst = 0 == endpointIdToIndex(descMap.endpoint)
             
         switch (descMap.clusterInt) {
             case 0x0000: // basic cluster
                 parseBasicCluster( descMap )
                 break
             case 0x0006: // switch state
+                logDebug "on/of cluster"
+                if (descMap?.command == "0B" && descMap?.data.size() >= 1) {
+                    value = Integer.parseInt(descMap.data[0], 16)
+                }
                 child.onSwitchState(value)
                 if (isFirst && child != this) {
                     logDebug "Replicating switchState in parent"
@@ -606,11 +640,15 @@ def parse(String description) {
                 }
                 break
             case 0x0008: // switch level state
+                logDebug "switch level cluster"
                 child.onSwitchLevel(value)
                 if (isFirst && child != this) {
                     logDebug "Replicating switchLevel in parent"
                     onSwitchLevel(value)
                 }
+                break
+            case 0x8021: 
+                logDebug "Received bind response, data=${descMap.data} (Sequence Number:${descMap.data[0]}, Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
                 break
             default :
                 logWarn "UNPROCESSED endpoint=${descMap?.endpoint} cluster=${descMap?.cluster} command=${descMap?.command} attrInt = ${descMap?.attrInt} value= ${descMap?.value} data=${descMap?.data}"
@@ -688,8 +726,12 @@ def parseTuyaCluster( descMap ) {
             def switchNumber = cmd == "06" ? "01" : cmd == "0C" ? "02" : cmd == "14" ? "03" : null
             logInfo "Countdown ${switchNumber} is ${value}s"
             break
-        case "04" : // (04) level for _TZE200_fvldku9h
-            handleTuyaClusterBrightnessCmd(cmd, value as int)
+        case "04" : // (04) level for _TZE200_fvldku9h ;  Tuya type of light source for all others?
+            if (isFanController()) {
+                handleTuyaClusterBrightnessCmd(cmd, value as int)
+            } else {
+                logDebug "received: Tuya type of light source cmd=${cmd} value=${value}"    // (LED, halogen, incandescent)
+            }
             break
         case "0A" : // (10)
             logDebug "Unknown Tuya dp= ${cmd} fn=${value}"
@@ -852,11 +894,12 @@ Child only code
 
 def onSwitchState(value) {
     def valueText = value==1 ? "on":"off"
-    sendEvent(name:"switch", value: valueText, descriptionText:"${device.displayName} set ${valueText}", unit: null)
+    logInfo "${device.displayName} set ${valueText}"
+    sendEvent(name:"switch", value: valueText, descriptionText: "${device.displayName} set ${valueText}", unit: null)
 }
 
 def onSwitchLevel(value) {
-    def level = valueToLevel(value.toInteger())
+    def level = valueToLevel(value.toInteger())    // TODO - null pointer exception! https://community.hubitat.com/t/girier-tuya-zigbee-3-0-dimmable-1-gang-switch-w-neutral/112620/10?u=kkossev 
     logDebug "onSwitchLevel: Value=${value} level=${level} (value=${value})"
     
     sendEvent(name:"level", value: level, descriptionText:"${device.displayName} set ${level}%", unit: "%")
@@ -926,8 +969,10 @@ def getChildByEndpointId(endpointId) {
 
 def getChildEndpointIds() {
     if (getChildDevices().size() == 0) {
-        return indexToEndpointId(0)
+        //logDebug "getChildEndpointIds() : no childs"
+        return [device.endpointId]
     } else {
+        //logDebug "getChildEndpointIds() : size = ${getChildDevices().size()}"
         return getChildDevices().collect{childDniToEndpointId(it.getDni())}
     }
 }
@@ -1019,7 +1064,6 @@ private getDP_TYPE_VALUE()      { "02" }    // [ 4 byte value ]
 private getDP_TYPE_STRING()     { "03" }    // [ N byte string ]
 private getDP_TYPE_ENUM()       { "04" }    // [ 0-255 ]
 private getDP_TYPE_BITMAP()     { "05" }    // [ 1,2,4 bytes ] as bits
-
 
 private sendTuyaCommand(dp, dp_type, fncmd) {
     ArrayList<String> cmds = []
