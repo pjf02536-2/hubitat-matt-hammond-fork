@@ -50,17 +50,20 @@ ver 0.2.8  2022/11/13 kkossev      - _TZE200_ip2akl4w fingerprint hardcoded
 ver 0.2.9  2022/12/10 kkossev      - deleting child devices bug fix; added _TZE200_fvldku9h Tuya Fan Switch; unscheduling old periodic jobs; Tuya Time Sync';
 ver 0.2.10 2023/01/02 kkossev      - added _TZE200_e3oitdyu 
 ver 0.2.11 2023/02/19 kkossev      -  added TS110E _TZ3210_k1msuvg6; TS0601 _TZE200_r32ctezx fan controller; changed importURL to dev. branch; dp=4 - type of light source?; added GLEDOPTO GL-SD-001; 1-gang modles bug fixes;
+ver 0.2.12 2023/03/11 kkossev      -(dev.branch) even more debug logging; fixed incorrect on/off status reporting bug for the standard ZCL dimmers. 
+*
+*                                   TODO: Girier
 */
 
-def version() { "0.2.11" }
-def timeStamp() {"2023/02/19 10:38 PM"}
+def version() { "0.2.12" }
+def timeStamp() {"2023/03/11 11:12 PM"}
 
 import groovy.transform.Field
 
-@Field static final Boolean debug = false
+@Field static final Boolean _DEBUG = false
 @Field static final Boolean deviceSimulation = false
-@Field static final String  simulatedModel = "TS0601"
-@Field static final String  simulatedManufacturer = "_TZE200_fvldku9h"
+@Field static final String  simulatedModel = "TS110E"
+@Field static final String  simulatedManufacturer = "_TZ3210_k1msuvg6"
 
 @Field static def modelConfigs = [
     "_TYZB01_v8gtiaed": [ numEps: 2, model: "TS110F", inClusters: "0000,0004,0005,0006,0008",     joinName: "Tuya Zigbee 2-Gang Dimmer module" ],                // '2 gang smart dimmer switch module with neutral'
@@ -86,7 +89,7 @@ import groovy.transform.Field
     "_TZE200_fvldku9h": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Fan Switch" ] ,                                  // https://www.aliexpress.com/item/4001242513879.html
     "_TZE200_r32ctezx": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Fan Switch" ],                                   // https://www.aliexpress.us/item/3256804518783061.html https://github.com/Koenkk/zigbee2mqtt/issues/12793
     "_TZE200_e3oitdyu": [ numEps: 2, model: "TS110E", inClusters: "0000,0004,0005,EF00",          joinName: "Moes ZigBee Dimmer Switche 2CH"],                     // https://community.hubitat.com/t/moes-dimmer-module-2ch/110512 
-    "_TZ3210_k1msuvg6": [ numEps: 1, model: "TS110E", inClusters: "0004,0005,0003,0006,0008,EF00,0000", joinName: "Tuya Zigbee 1-Gang Dimmer module"],               // https://community.hubitat.com/t/girier-tuya-zigbee-3-0-light-switch-module-smart-diy-breaker-1-2-3-4-gang-supports-2-way-control/104546/36?u=kkossev
+    "_TZ3210_k1msuvg6": [ numEps: 1, model: "TS110E", inClusters: "0004,0005,0003,0006,0008,EF00,0000", joinName: "Girier Zigbee 1-Gang Dimmer module"],           // https://community.hubitat.com/t/girier-tuya-zigbee-3-0-light-switch-module-smart-diy-breaker-1-2-3-4-gang-supports-2-way-control/104546/36?u=kkossev
     "GLEDOPTO":      [ numEps: 1, model: "GL-SD-001", inClusters: "0000,0003,0004,0005,0006,0008,1000", joinName: "Gledopto Triac Dimmer"]                         //
 ]
     
@@ -104,6 +107,7 @@ def isTS0601() {
 }
 
 def isFanController() {device.getDataValue("manufacturer") in ["_TZE200_fvldku9h", "_TZE200_r32ctezx"]}
+def isGirier() {device.getDataValue("manufacturer") in ["_TZ3210_k1msuvg6"]}
 
 metadata {
     definition (
@@ -123,7 +127,7 @@ metadata {
         
         command "toggle"
         
-        if (debug == true) {
+        if (_DEBUG == true) {
             command "zTest", [
                 [name:"dpCommand", type: "STRING", description: "Tuya DP Command", constraints: ["STRING"]],
                 [name:"dpValue",   type: "STRING", description: "Tuya DP value", constraints: ["STRING"]],
@@ -421,7 +425,8 @@ if parent, then act on endpoint 1
 def refresh() {
     if (isParent()) {
         logDebug "refresh(): parent ${indexToChildDni(0)}"
-        return cmdRefresh(indexToChildDni(0))
+        ArrayList<String> cmds = cmdRefresh(indexToChildDni(0))
+        sendZigbeeCommands(cmds)
     } else {
         logDebug "refresh(): child ${device.deviceNetworkId}"
         parent?.doActions( parent?.cmdRefresh(device.deviceNetworkId) )
@@ -544,9 +549,10 @@ def cmdSetLevel(String childDni, value, duration) {
         logDebug "${device.displayName}  sending cmdSetLevel command=${dpCommand} value=${value} ($dpValHex)"
         cmdsTuya = sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
         if (child.isAutoOn() && device.currentState('switch', true).value != 'on') {
-            logDebug "${device.displayName}  sending cmdSwitch on for switch #${endpointId}"
+            logDebug "${device.displayName} AutoOn(): sending cmdSwitch on for switch #${endpointId}"
             cmdsTuya += cmdSwitch(childDni, 1)
         }
+        logDebug "cmdSetLevel: sending cmdsTuya=${cmdsTuya}"
         return cmdsTuya
     }
     
@@ -557,6 +563,7 @@ def cmdSetLevel(String childDni, value, duration) {
     if (child.isAutoOn()) {
         cmd += "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 1 {}"
     }
+    logDebug "cmdSetLevel: sending cmds=${cmd}"
     return cmd
 }
 
@@ -627,9 +634,16 @@ def parse(String description) {
                 parseBasicCluster( descMap )
                 break
             case 0x0006: // switch state
-                logDebug "on/of cluster"
-                if (descMap?.command == "0B" && descMap?.data.size() >= 1) {
-                    value = Integer.parseInt(descMap.data[0], 16)
+            logDebug "on/off cluster 0x0006 command ${descMap?.command} value ${value}"
+                if (descMap?.command == "07" && descMap?.data.size() >= 1) {
+                    logDebug "Received Configure Reporting Response for cluster:${descMap.clusterId} , data=${descMap.data} (Status: ${descMap.data[0]=="00" ? 'Success' : '<b>Failure</b>'})"
+                    break
+                }
+                if (descMap?.command == "0B" && descMap?.data.size() >= 2) {
+                    String clusterCmd = descMap.data[0]
+                    def status = descMap.data[1]
+                    logDebug "Received ZCL Command Response for cluster ${descMap.clusterId} command ${clusterCmd}, data=${descMap.data} (Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
+                    break
                 }
                 child.onSwitchState(value)
                 if (isFirst && child != this) {
@@ -640,7 +654,17 @@ def parse(String description) {
                 }
                 break
             case 0x0008: // switch level state
-                logDebug "switch level cluster"
+                if (descMap?.command == "07" && descMap?.data.size() >= 1) {
+                    logDebug "Received Configure Reporting Response for cluster:${descMap.clusterId} , data=${descMap.data} (Status: ${descMap.data[0]=="00" ? 'Success' : '<b>Failure</b>'})"
+                    break
+                }
+                if (descMap?.command == "0B" && descMap?.data.size() >= 2) {
+                    String clusterCmd = descMap.data[0]
+                    def status = descMap.data[1]
+                    logDebug "Received ZCL Command Response for cluster ${descMap.clusterId} command ${clusterCmd}, data=${descMap.data} (Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
+                    break
+                }
+                logDebug "switch level cluster 0x0008 command ${descMap?.command} value ${value}"
                 child.onSwitchLevel(value)
                 if (isFirst && child != this) {
                     logDebug "Replicating switchLevel in parent"
@@ -893,7 +917,7 @@ Child only code
 */
 
 def onSwitchState(value) {
-    def valueText = value==1 ? "on":"off"
+    def valueText = value == 0 ? "off" : "on"
     logInfo "${device.displayName} set ${valueText}"
     sendEvent(name:"switch", value: valueText, descriptionText: "${device.displayName} set ${valueText}", unit: null)
 }
