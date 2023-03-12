@@ -49,14 +49,15 @@ ver 0.2.7  2022/11/11 kkossev      - added _TZE200_ip2akl4w _TZE200_1agwnems _TZ
 ver 0.2.8  2022/11/13 kkossev      - _TZE200_ip2akl4w fingerprint hardcoded
 ver 0.2.9  2022/12/10 kkossev      - deleting child devices bug fix; added _TZE200_fvldku9h Tuya Fan Switch; unscheduling old periodic jobs; Tuya Time Sync';
 ver 0.2.10 2023/01/02 kkossev      - added _TZE200_e3oitdyu 
-ver 0.2.11 2023/02/19 kkossev      -  added TS110E _TZ3210_k1msuvg6; TS0601 _TZE200_r32ctezx fan controller; changed importURL to dev. branch; dp=4 - type of light source?; added GLEDOPTO GL-SD-001; 1-gang modles bug fixes;
-ver 0.2.12 2023/03/12 kkossev      -(dev.branch) even more debug logging; fixed incorrect on/off status reporting bug for the standard ZCL dimmers; added autoRefresh option for GLEDOPTO
+ver 0.2.11 2023/02/19 kkossev      - added TS110E _TZ3210_k1msuvg6; TS0601 _TZE200_r32ctezx fan controller; changed importURL to dev. branch; dp=4 - type of light source?; added GLEDOPTO GL-SD-001; 1-gang modles bug fixes;
+ver 0.2.12 2023/03/12 kkossev      - more debug logging; fixed incorrect on/off status reporting bug for the standard ZCL dimmers; added autoRefresh option for GLEDOPTO
+ver 0.3.0  2023/03/12 kkossev      - bugfix: TS110E/F configiration for the automatic level reporting was not working.
 *
-*                                   TODO: Girier
+*                                   TODO:
 */
 
-def version() { "0.2.12" }
-def timeStamp() {"2023/03/12 1:08 PM"}
+def version() { "0.3.0" }
+def timeStamp() {"2023/03/12 2:23 PM"}
 
 import groovy.transform.Field
 
@@ -157,7 +158,7 @@ metadata {
 
         input "maxLevel", "number", title: "<b>Maximum level</b>", description: "<i>Maximum brightness level (%). 100% on the dimmer level is mapped to this.</i>", required: true, multiple: false, defaultValue: 100
         if (maxLevel < minLevel) { maxLevel = 100 } else if (maxLevel > 100) { maxLevel = 100 }
-        
+        /*
         if (isGirier()) {
             input name: 'lightType', type: 'enum', title: '<b>Light Type</b>', options: TS110ELightTypeOptions.options, defaultValue: TS110ELightTypeOptions.defaultValue, description: \
                 '<i>Configures the lights type.</i>'
@@ -165,6 +166,7 @@ metadata {
                 '<i>Configures the switch type.</i>'
             
         }
+        */
     }
 }
 
@@ -256,8 +258,8 @@ def listenChildDevices() {
                 "zdo bind 0x${device.deviceNetworkId} 0x${endpointId} 0x01 0x0006 {${device.zigbeeId}} {}", "delay 200",
                 "zdo bind 0x${device.deviceNetworkId} 0x${endpointId} 0x01 0x0008 {${device.zigbeeId}} {}", "delay 200",
                 //reporting
-                "he cr 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 0 0x10 0 0xFFFF {}","delay 200",
-                "he cr 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 0 0x20 0 0xFFFF {}", "delay 200",
+                "he cr 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 0 0x10 1 0xFFFE {}","delay 200",
+                "he cr 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 0 0x20 1 0xFFFE {}", "delay 200",
             ] + cmdRefresh(endpointIdToChildDni(endpointId))
         }
     }
