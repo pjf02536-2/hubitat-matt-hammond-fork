@@ -50,13 +50,13 @@ ver 0.2.8  2022/11/13 kkossev      - _TZE200_ip2akl4w fingerprint hardcoded
 ver 0.2.9  2022/12/10 kkossev      - deleting child devices bug fix; added _TZE200_fvldku9h Tuya Fan Switch; unscheduling old periodic jobs; Tuya Time Sync';
 ver 0.2.10 2023/01/02 kkossev      - added _TZE200_e3oitdyu 
 ver 0.2.11 2023/02/19 kkossev      -  added TS110E _TZ3210_k1msuvg6; TS0601 _TZE200_r32ctezx fan controller; changed importURL to dev. branch; dp=4 - type of light source?; added GLEDOPTO GL-SD-001; 1-gang modles bug fixes;
-ver 0.2.12 2023/03/11 kkossev      -(dev.branch) even more debug logging; fixed incorrect on/off status reporting bug for the standard ZCL dimmers. 
+ver 0.2.12 2023/03/12 kkossev      -(dev.branch) even more debug logging; fixed incorrect on/off status reporting bug for the standard ZCL dimmers; added autoRefresh option for GLEDOPTO
 *
 *                                   TODO: Girier
 */
 
 def version() { "0.2.12" }
-def timeStamp() {"2023/03/11 11:12 PM"}
+def timeStamp() {"2023/03/12 1:08 PM"}
 
 import groovy.transform.Field
 
@@ -90,7 +90,7 @@ import groovy.transform.Field
     "_TZE200_r32ctezx": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Fan Switch" ],                                   // https://www.aliexpress.us/item/3256804518783061.html https://github.com/Koenkk/zigbee2mqtt/issues/12793
     "_TZE200_e3oitdyu": [ numEps: 2, model: "TS110E", inClusters: "0000,0004,0005,EF00",          joinName: "Moes ZigBee Dimmer Switche 2CH"],                     // https://community.hubitat.com/t/moes-dimmer-module-2ch/110512 
     "_TZ3210_k1msuvg6": [ numEps: 1, model: "TS110E", inClusters: "0004,0005,0003,0006,0008,EF00,0000", joinName: "Girier Zigbee 1-Gang Dimmer module"],           // https://community.hubitat.com/t/girier-tuya-zigbee-3-0-light-switch-module-smart-diy-breaker-1-2-3-4-gang-supports-2-way-control/104546/36?u=kkossev
-    "GLEDOPTO":      [ numEps: 1, model: "GL-SD-001", inClusters: "0000,0003,0004,0005,0006,0008,1000", joinName: "Gledopto Triac Dimmer"]                         //
+    "GLEDOPTO":         [ numEps: 1, model: "GL-SD-001", inClusters: "0000,0003,0004,0005,0006,0008,1000", joinName: "Gledopto Triac Dimmer"]                         //
 ]
     
 def config() {
@@ -107,7 +107,7 @@ def isTS0601() {
 }
 
 def isFanController() {device.getDataValue("manufacturer") in ["_TZE200_fvldku9h", "_TZE200_r32ctezx"]}
-def isGirier() {device.getDataValue("manufacturer") in ["_TZ3210_k1msuvg6"]}
+def isGirier() { (_DEBUG==true) || (device.getDataValue("manufacturer") in ["_TZ3210_k1msuvg6", "_TZ3210_zxbtub8r"])}
 
 metadata {
     definition (
@@ -118,7 +118,7 @@ metadata {
         documentationLink: "https://github.com/matt-hammond-001/hubitat-code/blob/master/drivers/tuya-zigbee-dimmer-module.README.md",
         importUrl: "https://raw.githubusercontent.com/kkossev/hubitat-matt-hammond-fork/development/drivers/tuya-zigbee-dimmer-module.groovy"
     ) {
-
+        
         capability "Configuration"
         capability "Refresh"
         capability "Light"
@@ -136,8 +136,6 @@ metadata {
             command "test", [[name: "test", type: "STRING", description: "test", constraints: ["STRING"]]]
         }
         
-        //fingerprint profileId:"0104", endpointId:"01", inClusters:"0004,0005,EF00,0000", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_ip2akl4w"
-        
         modelConfigs.each{ data ->
             fingerprint profileId: "0104",
                 inClusters: data.value.inClusters,
@@ -149,156 +147,41 @@ metadata {
     }
     
     preferences {
-        input "minLevel",
-            "number",
-            title: "Minimum level",
-            description: "Minimum brightness level (%). 0% on the dimmer level is mapped to this.",
-            required: true,
-            multiple: false,
-            defaultValue: 0
+        input "debugEnable", "bool", title: "<b>Enable debug logging</b>", required: false, defaultValue: false
+        input "infoEnable", "bool", title: "<b>Enable info logging</b>", required: false, defaultValue: true
+        input "autoOn", "bool", title: "<b>Turn on when level adjusted</b>", description: "<i>Switch turns on automatically when dimmer level is adjusted.</i>", required: true, multiple: false, defaultValue: true
+        input "autoRefresh", "bool", title: "<b>Auto refresh when level adjusted</b>", description: "<i>Automatically send an Refresh command when dimmer level is adjusted.</i>", required: true, multiple: false, defaultValue: false
         
-            if (minLevel < 0) {
-                minLevel = 0
-            } else if (minLevel > 99) {
-                minLevel = 99
-            }
+        input "minLevel", "number", title: "<b>Minimum level</b>", description: "<i>Minimum brightness level (%). 0% on the dimmer level is mapped to this.</i>", required: true, multiple: false, defaultValue: 0
+            if (minLevel < 0) { minLevel = 0 } else if (minLevel > 99) { minLevel = 99 }
 
-        input "maxLevel", "number", title: "Maximum level", description: "Maximum brightness level (%). 100% on the dimmer level is mapped to this.", required: true, multiple: false, defaultValue: 100
-        if (maxLevel < minLevel) {
-            maxLevel = 100
-        } 
-        else if (maxLevel > 100) {
-            maxLevel = 100
-        }
+        input "maxLevel", "number", title: "<b>Maximum level</b>", description: "<i>Maximum brightness level (%). 100% on the dimmer level is mapped to this.</i>", required: true, multiple: false, defaultValue: 100
+        if (maxLevel < minLevel) { maxLevel = 100 } else if (maxLevel > 100) { maxLevel = 100 }
         
-        input "autoOn",
-            "bool",
-            title: "Turn on when level adjusted",
-            description: "Switch turns on automatically when dimmer level is adjusted.",
-            required: true,
-            multiple: false,
-            defaultValue: true
-        
-        input "debugEnable", "bool", title: "Enable debug logging", required: false, defaultValue: false
-        input "infoEnable", "bool", title: "Enable info logging", required: false, defaultValue: true
-    }
-}
-
-/*
------------------------------------------------------------------------------
-Logging output
------------------------------------------------------------------------------
-*/
-
-def logDebug(msg) {
-    if (settings.debugEnable) {
-        log.debug msg
-    }
-}
-
-def logInfo(msg) {
-    if (settings.infoEnable) {
-        log.info msg
-    }
-}
-
-def logWarn(msg) {
-    if (settings.debugEnable) {
-        log.warn msg
-    }
-}
-
-/*
------------------------------------------------------------------------------
-Standard handlers
------------------------------------------------------------------------------
-*/
-
-def installed() {
-    return initialized()
-}
-
-def configure() {
-    return initialized()
-}
-
-def initialize() {
-    return initialized()
-}
-
-def updated() {
-    logDebug "updated() ..."
-    checkDriverVersion()
-    //
-    if (isTS0601()) {
-        ArrayList<String> cmdsTuya = []
-        def cmd = "01"
-        def eps = parent?.config()?.numEps
-        logDebug "config().numEps = ${eps}"
-        if (eps > 1) {
-            cmd = this.device.getData().componentName[-2..-1]
-            logInfo "### updating settings for child device ${this.device.getData().componentName} ... device #${cmd}"
+        if (isGirier()) {
+            input name: 'lightType', type: 'enum', title: '<b>Light Type</b>', options: TS110ELightTypeOptions.options, defaultValue: TS110ELightTypeOptions.defaultValue, description: \
+                '<i>Configures the lights type.</i>'
+            input name: 'switchType', type: 'enum', title: '<b>Switch Type</b>', options: TS110ESwitchTypeOptions.options, defaultValue: TS110ESwitchTypeOptions.defaultValue, description: \
+                '<i>Configures the switch type.</i>'
+            
         }
-        else {    // single EP device
-            logInfo "### updating settings for device ${device.getDataValue("manufacturer")} ${config()}"
-        }
-        // minLevel
-        Integer value = Math.round(this.minLevel * 10)
-        def dpValHex  = zigbee.convertToHexString(value as int, 8) 
-        logDebug "updated() minLevel value = ${this.minLevel} (raw=$value)"
-        def dpCommand = cmd == "01" ? "03" : cmd == "02" ? "09" : cmd == "03" ? "11" : null
-        logDebug "sending minLevel command=${dpCommand} value=${value} ($dpValHex)"
-        if (isParent()) cmdsTuya += sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
-        else cmdsTuya += parent?.sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
-        // maxLevel
-        value = Math.round(this.maxLevel * 10)
-        dpValHex  = zigbee.convertToHexString(value as int, 8) 
-        logDebug "updated() maxLevel  value = ${this.maxLevel} (raw=$value)"
-        dpCommand = cmd == "01" ? "05" : cmd == "02" ? "0B" : cmd == "03" ? "13" : null
-        logDebug "sending maxLevel command=${dpCommand} value=${value} ($dpValHex)"
-        if (isParent()) cmdsTuya += sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
-        else cmdsTuya += parent?.sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
-        //
-        hubitat.device.HubMultiAction allActions = new hubitat.device.HubMultiAction()
-        cmdsTuya.each {
-            allActions.add(new hubitat.device.HubAction(it, hubitat.device.Protocol.ZIGBEE))
-        }
-        sendHubCommand(allActions)        
     }
-    if (isParent()) {
-        logDebug "updated parent->child"
-        getChildByEndpointId(indexToEndpointId(0)).onParentSettingsChange(settings)
-    } else {
-        logDebug "updated child->parent"
-        parent?.onChildSettingsChange(device.deviceNetworkId, settings)
-    }
-    return initialized()
 }
 
-def initialized() {
-    def cmds = []
-    if (debug == true && deviceSimulation == true) {
-        device.updateDataValue("model", simulatedModel)
-        device.updateDataValue("manufacturer", simulatedManufacturer)
-        logDebug "device simulation: ${simulatedModel} ${simulatedManufacturer}"
-    }
-    unschedule() // added 12/10/2022
-    logDebug "initialized() device.getData() = ${device.getData()}"
-    
-    if (isParent()) {
-        createChildDevices()   
-        if (device.getDataValue("model") == "TS0601") {
-            logDebug "spelling tuyaBlackMagic()"
-            cmds += tuyaBlackMagic()
-        }
-        cmds += listenChildDevices()
-        //
-    }
-    else {
-        logDebug "skipping initialized() for child device"
-    }
-    return cmds
-}
+@Field static final int TS110E_BRIGHTNESS = 0xF000            // (61440)       // TODO: 0, 1000 -> 1, 254 (don't go to 255!!) - Check - probably the brightness is controlled on attribute 0xF000 (cluster 8)!!!   
+@Field static final Map TS110ESwitchTypeOptions = [           // 0xFC00 (64512)
+    defaultValue: 0,
+    options     : [0: 'momentary', 1: 'toggle', 2: 'state']
+]
+@Field static final Map TS110ELightTypeOptions = [            // 0xFC02 (64514), type: 0x20
+    defaultValue: 0,
+    options     : [0: 'led', 1: 'incandescent', 2: 'halogen']
+]
+@Field static final int TS110E_MIN_BRIGHTNESS = 0xFC03        // (64515)       // TODO: 0, 1000 -> 1, 255,  type: 0x21 Check !!!   
+@Field static final int TS110E_MAX_BRIGHTNESS = 0xFC04        // (64516)       // TODO: 0, 1000 -> 1, 255,  type: 0x21 -  Check !!!   
+// Girier TS110E may not support power-on-behavour?  https://github.com/Koenkk/zigbee2mqtt/issues/15902#issuecomment-1382848150     https://github.com/Koenkk/zigbee2mqtt/issues/16804 
+
+
 
 
 /*
@@ -458,6 +341,9 @@ def toggle() {
 }
 
 def setLevel(level, duration=0) {
+    if (settings.autoRefresh == true) {
+        runIn(1, 'refresh')
+    }
     if (isParent()) {
         def value = levelToValue(level)
         return cmdSetLevel(indexToChildDni(0), value, duration)
@@ -664,11 +550,23 @@ def parse(String description) {
                     logDebug "Received ZCL Command Response for cluster ${descMap.clusterId} command ${clusterCmd}, data=${descMap.data} (Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
                     break
                 }
-                logDebug "switch level cluster 0x0008 command ${descMap?.command} value ${value}"
-                child.onSwitchLevel(value)
-                if (isFirst && child != this) {
-                    logDebug "Replicating switchLevel in parent"
-                    onSwitchLevel(value)
+                logDebug "switch level cluster 0x0008 command ${descMap?.command} attrId ${descMap?.attrId} value ${value}"
+                if (descMap?.attrId == "0000" || descMap?.attrId == "F000") {
+                    child.onSwitchLevel(value)
+                    if (isFirst && child != this) {
+                        logDebug "Replicating switchLevel in parent"
+                        onSwitchLevel(value)
+                    }
+                } else if (descMap?.attrId == "FC02") {
+                    //value = hexStrToUnsignedInt(descMap.value)
+                    logInfo "light type is '${TS110ELightTypeOptions.options[value]}' (0x${descMap.value})"
+                    //device.updateSetting('lightType', [value: value.toString(), type: 'enum'])
+                } else if (descMap?.attrId == "FC03") {
+                    logInfo "minLevel is '${TS110ELightTypeOptions.options[value]}' (0x${descMap.value})"
+                    //device.updateSetting('minLevel', [value: value, type: 'number'])
+                } else if (descMap?.attrId == "FC04") {
+                    logInfo "maxLevel is '${TS110ELightTypeOptions.options[value]}' (0x${descMap.value})"
+                    //device.updateSetting('maxLevel', [value: value, type: 'number'])
                 }
                 break
             case 0x8021: 
@@ -1045,6 +943,100 @@ def valueToLevel(Integer value) {
     return reScaled
 }
 
+/*
+-----------------------------------------------------------------------------
+Standard handlers
+-----------------------------------------------------------------------------
+*/
+
+def installed() {
+    logDebug "installed() ..."
+    return initialized()
+}
+
+def configure() {
+    return initialized()
+}
+
+def initialize() {
+    return initialized()
+}
+
+def updated() {
+    logDebug "updated() ..."
+    checkDriverVersion()
+    //
+    if (isTS0601()) {
+        ArrayList<String> cmdsTuya = []
+        def cmd = "01"
+        def eps = parent?.config()?.numEps
+        logDebug "config().numEps = ${eps}"
+        if (eps > 1) {
+            cmd = this.device.getData().componentName[-2..-1]
+            logInfo "### updating settings for child device ${this.device.getData().componentName} ... device #${cmd}"
+        }
+        else {    // single EP device
+            logInfo "### updating settings for device ${device.getDataValue("manufacturer")} ${config()}"
+        }
+        // minLevel
+        Integer value = Math.round(this.minLevel * 10)
+        def dpValHex  = zigbee.convertToHexString(value as int, 8) 
+        logDebug "updated() minLevel value = ${this.minLevel} (raw=$value)"
+        def dpCommand = cmd == "01" ? "03" : cmd == "02" ? "09" : cmd == "03" ? "11" : null
+        logDebug "sending minLevel command=${dpCommand} value=${value} ($dpValHex)"
+        if (isParent()) cmdsTuya += sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
+        else cmdsTuya += parent?.sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
+        // maxLevel
+        value = Math.round(this.maxLevel * 10)
+        dpValHex  = zigbee.convertToHexString(value as int, 8) 
+        logDebug "updated() maxLevel  value = ${this.maxLevel} (raw=$value)"
+        dpCommand = cmd == "01" ? "05" : cmd == "02" ? "0B" : cmd == "03" ? "13" : null
+        logDebug "sending maxLevel command=${dpCommand} value=${value} ($dpValHex)"
+        if (isParent()) cmdsTuya += sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
+        else cmdsTuya += parent?.sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
+        //
+        hubitat.device.HubMultiAction allActions = new hubitat.device.HubMultiAction()
+        cmdsTuya.each {
+            allActions.add(new hubitat.device.HubAction(it, hubitat.device.Protocol.ZIGBEE))
+        }
+        sendHubCommand(allActions)        
+    }
+    if (isParent()) {
+        logDebug "updated parent->child"
+        getChildByEndpointId(indexToEndpointId(0)).onParentSettingsChange(settings)
+    } else {
+        logDebug "updated child->parent"
+        parent?.onChildSettingsChange(device.deviceNetworkId, settings)
+    }
+    return initialized()
+}
+
+def initialized() {
+    def cmds = []
+    if (debug == true && deviceSimulation == true) {
+        device.updateDataValue("model", simulatedModel)
+        device.updateDataValue("manufacturer", simulatedManufacturer)
+        logDebug "device simulation: ${simulatedModel} ${simulatedManufacturer}"
+    }
+    unschedule() // added 12/10/2022
+    logDebug "initialized() device.getData() = ${device.getData()}"
+    
+    if (isParent()) {
+        createChildDevices()   
+        if (device.getDataValue("model") == "TS0601") {
+            logDebug "spelling tuyaBlackMagic()"
+            cmds += tuyaBlackMagic()
+        }
+        cmds += listenChildDevices()
+        //
+    }
+    else {
+        logDebug "skipping initialized() for child device"
+    }
+    return cmds
+}
+
+
 
 /*
 -----------------------------------------------------------------------------
@@ -1068,6 +1060,33 @@ def intTo16bitUnsignedHex(value) {
 def intTo8bitUnsignedHex(value) {
     return zigbee.convertToHexString(value.toInteger(), 2)
 }
+
+/*
+-----------------------------------------------------------------------------
+Logging output
+-----------------------------------------------------------------------------
+*/
+
+def logDebug(msg) {
+    if (settings.debugEnable) {
+        log.debug msg
+    }
+}
+
+def logInfo(msg) {
+    if (settings.infoEnable) {
+        log.info msg
+    }
+}
+
+def logWarn(msg) {
+    if (settings.debugEnable) {
+        log.warn msg
+    }
+}
+
+
+
 //////////////////////////////////////////////////////////////////////////////
 
 private getCLUSTER_TUYA()       { 0xEF00 }
