@@ -52,7 +52,7 @@ ver 0.2.10 2023/01/02 kkossev      - added _TZE200_e3oitdyu
 ver 0.2.11 2023/02/19 kkossev      - added TS110E _TZ3210_k1msuvg6; TS0601 _TZE200_r32ctezx fan controller; changed importURL to dev. branch; dp=4 - type of light source?; added GLEDOPTO GL-SD-001; 1-gang modles bug fixes;
 ver 0.2.12 2023/03/12 kkossev      - more debug logging; fixed incorrect on/off status reporting bug for the standard ZCL dimmers; added autoRefresh option for GLEDOPTO
 ver 0.3.0  2023/03/12 kkossev      - bugfix: TS110E/F configiration for the automatic level reporting was not working.
-ver 0.3.1  2023/03/12 kkossev      - added TS110E _TZ3210_pagajpog; added advancedOptions; added forcedProfile; added deviceProfilesV2; added initialize() command; sendZigbeeCommands() in all Command handlers; configure() and updated() do not re-initialize the device!
+ver 0.3.1  2023/03/12 kkossev      - added TS110E _TZ3210_pagajpog; added advancedOptions; added forcedProfile; added deviceProfilesV2; added initialize() command; sendZigbeeCommands() in all Command handlers; configure() and updated() do not re-initialize the device!; setDeviceNameAndProfile()
 *
 *                                   TODO: Hubitat 'F2 bug' patch
 *                                   TODO: Tuya Fan Switch support
@@ -61,11 +61,12 @@ ver 0.3.1  2023/03/12 kkossev      - added TS110E _TZ3210_pagajpog; added advanc
 */
 
 def version() { "0.3.1" }
-def timeStamp() {"2023/03/25 6:26 PM"}
+def timeStamp() {"2023/03/25 11:40 PM"}
 
 import groovy.transform.Field
 
 @Field static final Boolean _DEBUG = false
+@Field static final Boolean DEFAULT_DEBUG_OPT = true
 @Field static final Boolean deviceSimulation = false
 @Field static final String  simulatedModel = "TS110E"
 @Field static final String  simulatedManufacturer = "_TZ3210_k1msuvg6"
@@ -191,7 +192,7 @@ def isTS0601() {
             models        : ["gq8b1uv", "GL-SD-001"],
             fingerprints  : [
                 [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0004,0005,EF00,0000", outClusters:"0019,000A", model:"gq8b1uv", manufacturer:"gq8b1uv", deviceJoinName: "TUYATEC Zigbee smart dimmer"],                         // https://www.aliexpress.com/item/4001242513879.html
-                [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0004,0005,EF00,0000", outClusters:"0019,000A", model:"GL-SD-001", manufacturer:"GLEDOPTO", deviceJoinName: "TGledopto Triac Dimmer"]                          // https://www.aliexpress.us/item/3256804518783061.html https://github.com/Koenkk/zigbee2mqtt/issues/12793
+                [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0004,0005,EF00,0000", outClusters:"0019,000A", model:"GL-SD-001", manufacturer:"GLEDOPTO", deviceJoinName: "Gledopto Triac Dimmer"]                          // https://www.aliexpress.us/item/3256804518783061.html https://github.com/Koenkk/zigbee2mqtt/issues/12793
             ],
             deviceJoinName: "Other OEM Dimmer",
             capabilities  : ["SwitchLevel": false],
@@ -246,7 +247,7 @@ metadata {
     }
     
     preferences {
-        input "debugEnable", "bool", title: "<b>Enable debug logging</b>", required: false, defaultValue: false
+        input "debugEnable", "bool", title: "<b>Enable debug logging</b>", required: false, defaultValue: DEFAULT_DEBUG_OPT
         input "infoEnable", "bool", title: "<b>Enable info logging</b>", required: false, defaultValue: true
         input "autoOn", "bool", title: "<b>Turn on when level adjusted</b>", description: "<i>Switch turns on automatically when dimmer level is adjusted.</i>", required: true, multiple: false, defaultValue: true
         input "autoRefresh", "bool", title: "<b>Auto refresh when level adjusted</b>", description: "<i>Automatically send an Refresh command when dimmer level is adjusted.</i>", required: true, multiple: false, defaultValue: false
@@ -1081,6 +1082,9 @@ def getDeviceInfo() {
 
 //  will be called when device is first added
 def installed() {
+    setDestinationEP()
+    checkDriverVersion()
+    setDeviceNameAndProfile()
     logDebug "<b>installed()</b> ... ${getDeviceInfo()}"
     initialized()
 }
@@ -1098,20 +1102,25 @@ def initialize() {
     // return initialized()
 }
 
-// will be called when user selects Save Preferences
-def updated() {
-    logDebug "updated() ... ${getDeviceInfo()}"
-    checkDriverVersion()
     // version 0.3.1
+
+def setDestinationEP() {
     def ep = device.getEndpointId()
-    if ( ep  != null && ep != 'F2') {
+    if (ep != null && ep != 'F2') {
         state.destinationEP = ep
         logDebug "destinationEP = ${state.destinationEP}"
     }
     else {
         logWarn "Destination End Point not found or invalid(${ep}), activating the F2 bug patch!"
         state.destinationEP = "01"    // fallback EP
-    }        
+    }      
+}
+
+// will be called when user selects Save Preferences
+def updated() {
+    logDebug "<b>updated()</b> ... ${getDeviceInfo()}"
+    checkDriverVersion()
+      
     // version 0.3.1
     if (settings?.forcedProfile != null) {
         logDebug "state.deviceProfile=${state.deviceProfile}, settings.forcedProfile=${settings?.forcedProfile}, getProfileKey()=${getProfileKey(settings?.forcedProfile)}"
@@ -1173,7 +1182,7 @@ def updated() {
     //return initialized()
 }
 
-// custom initialization method
+// custom initialization method, called from installed()
 def initialized() {
     logDebug "<b>initialized()</b> ... ${getDeviceInfo()}"
     ArrayList<String> cmds = []
@@ -1190,6 +1199,9 @@ def initialized() {
         if (device.getDataValue("model") == "TS0601") {
             logDebug "spelling tuyaBlackMagic()"
             cmds += tuyaBlackMagic()
+        }
+        else {
+            logDebug "tuyaBlackMagic() was skipped for model ${device.getDataValue('model')}"
         }
         ArrayList<String> configCmds = listenChildDevices()
         if (configCmds != null) {
@@ -1354,7 +1366,7 @@ def getDeviceNameAndProfile( model=null, manufacturer=null) {
     return [deviceName, deviceProfile]
 }
 
-// called from  initializeVars( fullInit = true)
+// called from TODO
 def setDeviceNameAndProfile( model=null, manufacturer=null) {
     def (String deviceName, String deviceProfile) = getDeviceNameAndProfile(model, manufacturer)
     if (deviceProfile == null) {
