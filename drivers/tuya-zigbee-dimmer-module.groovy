@@ -52,7 +52,7 @@ ver 0.2.10 2023/01/02 kkossev      - added _TZE200_e3oitdyu
 ver 0.2.11 2023/02/19 kkossev      - added TS110E _TZ3210_k1msuvg6; TS0601 _TZE200_r32ctezx fan controller; changed importURL to dev. branch; dp=4 - type of light source?; added GLEDOPTO GL-SD-001; 1-gang modles bug fixes;
 ver 0.2.12 2023/03/12 kkossev      - more debug logging; fixed incorrect on/off status reporting bug for the standard ZCL dimmers; added autoRefresh option for GLEDOPTO
 ver 0.3.0  2023/03/12 kkossev      - bugfix: TS110E/F configiration for the automatic level reporting was not working.
-ver 0.3.1  2023/03/12 kkossev      - added TS110E _TZ3210_pagajpog; added advancedOptions; added forcedProfile; added deviceProfilesV2; added initialize() command; sendZigbeeCommands() in all Command handlers; configure() and updated() do not re-initialize the device!; setDeviceNameAndProfile()
+ver 0.4.0  2023/03/12 kkossev      - added TS110E _TZ3210_pagajpog; added advancedOptions; added forcedProfile; added deviceProfilesV2; added initialize() command; sendZigbeeCommands() in all Command handlers; configure() and updated() do not re-initialize the device!; setDeviceNameAndProfile(); destEP here and there
 *
 *                                   TODO: Hubitat 'F2 bug' patch
 *                                   TODO: Tuya Fan Switch support
@@ -60,8 +60,8 @@ ver 0.3.1  2023/03/12 kkossev      - added TS110E _TZ3210_pagajpog; added advanc
 *
 */
 
-def version() { "0.3.1" }
-def timeStamp() {"2023/03/25 11:40 PM"}
+def version() { "0.4.0" }
+def timeStamp() {"2023/03/25 11:45 PM"}
 
 import groovy.transform.Field
 
@@ -205,8 +205,8 @@ def isTS0601() {
 def getModelGroup()          { return state.deviceProfile ?: "UNKNOWN" }
 def getDeviceProfilesMap()   {deviceProfilesV2.values().description as List<String>}
 
-def isFanController() {device.getDataValue("manufacturer") in ["_TZE200_fvldku9h", "_TZE200_r32ctezx"]}
-def isGirier() { (_DEBUG==true) || (device.getDataValue("manufacturer") in ["_TZ3210_k1msuvg6", "_TZ3210_zxbtub8r"])}
+def isFanController() { return getModelGroup().contains("TS0601_FAN") }               //{device.getDataValue("manufacturer") in ["_TZE200_fvldku9h", "_TZE200_r32ctezx"]}
+def isTS110E()        { return getModelGroup().contains("TS110E_DIMMER") }            // { (_DEBUG==true) || (device.getDataValue("manufacturer") in ["_TZ3210_k1msuvg6", "_TZ3210_zxbtub8r"])}
 
 metadata {
     definition (
@@ -258,7 +258,7 @@ metadata {
         input "maxLevel", "number", title: "<b>Maximum level</b>", description: "<i>Maximum brightness level (%). 100% on the dimmer level is mapped to this.</i>", required: true, multiple: false, defaultValue: 100
         if (maxLevel < minLevel) { maxLevel = 100 } else if (maxLevel > 100) { maxLevel = 100 }
         /*
-        if (isGirier()) {
+        if (isTS110E()) {
             input name: 'lightType', type: 'enum', title: '<b>Light Type</b>', options: TS110ELightTypeOptions.options, defaultValue: TS110ELightTypeOptions.defaultValue, description: \
                 '<i>Configures the lights type.</i>'
             input name: 'switchType', type: 'enum', title: '<b>Switch Type</b>', options: TS110ESwitchTypeOptions.options, defaultValue: TS110ESwitchTypeOptions.defaultValue, description: \
@@ -551,7 +551,7 @@ def cmdSetLevel(String childDni, value, duration) {
         def dpValHex  = zigbee.convertToHexString(value as int, 8) 
         def cmd = childDni[-2..-1]
         def dpCommand = cmd == "01" ? "02" : cmd == "02" ? "08" : cmd == "03" ? "10" : null
-        if (device.getDataValue("manufacturer") == "_TZE200_fvldku9h") {
+        if (isFanController()) {
             dpCommand = "04"
             dpValHex  = zigbee.convertToHexString((value/10) as int, 8) 
         }
@@ -716,7 +716,9 @@ Tuya cluster EF00 specific code
 */
 
 def tuyaBlackMagic() {
-    return zigbee.readAttribute(0x0000, [0x0004, 0x000, 0x0001, 0x0005, 0x0007, 0xfffe], [:], delay=200)
+    def ep = safeToInt(state.destinationEP)
+    if (ep==null || ep==0) ep = 1
+    return zigbee.readAttribute(0x0000, [0x0004, 0x000, 0x0001, 0x0005, 0x0007, 0xfffe], [destEndpoint :ep], delay=200)
 }
 
 def parseTuyaCluster( descMap ) {
@@ -915,9 +917,9 @@ private int getAttributeValue(ArrayList _data) {
 }
 
 private sendTuyaCommand(int dp, int dpType, int fnCmd, int fnCmdLength) {
-	//atomicState.waitingForResponseSinceMillis = now()
-	//checkForResponse()
-    
+    def ep = safeToInt(state.destinationEP)
+    if (ep==null || ep==0) ep = 1
+       
 	def dpHex = zigbee.convertToHexString(dp, 2)
 	def dpTypeHex = zigbee.convertToHexString(dpType, 2)
 	def fnCmdHex = zigbee.convertToHexString(fnCmd, fnCmdLength)
@@ -928,7 +930,7 @@ private sendTuyaCommand(int dp, int dpType, int fnCmd, int fnCmdLength) {
 				   + zigbee.convertToHexString((fnCmdLength / 2) as int, 4)
 				   + fnCmdHex)
 	logTrace("sendTuyaCommand: message=${message}")
-	/*parent?.*/ zigbee.command(CLUSTER_TUYA, ZIGBEE_COMMAND_SET_DATA, message)
+	zigbee.command(CLUSTER_TUYA, ZIGBEE_COMMAND_SET_DATA, [destEndpoint :ep], message)
 }
 
 private randomPacketId() {
@@ -1289,7 +1291,10 @@ private getDP_TYPE_BITMAP()     { "05" }    // [ 1,2,4 bytes ] as bits
 
 private sendTuyaCommand(dp, dp_type, fncmd) {
     ArrayList<String> cmds = []
-    cmds += zigbee.command(CLUSTER_TUYA, SETDATA, PACKET_ID + dp + dp_type + zigbee.convertToHexString((int)(fncmd.length()/2), 4) + fncmd )
+    def ep = safeToInt(state.destinationEP)
+    if (ep==null || ep==0) ep = 1
+    
+    cmds += zigbee.command(CLUSTER_TUYA, SETDATA, [destEndpoint :ep], PACKET_ID + dp + dp_type + zigbee.convertToHexString((int)(fncmd.length()/2), 4) + fncmd )
     logDebug "${device.displayName} sendTuyaCommand = ${cmds}"
     return cmds
 }
