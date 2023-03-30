@@ -52,16 +52,18 @@ ver 0.2.10 2023/01/02 kkossev      - added _TZE200_e3oitdyu
 ver 0.2.11 2023/02/19 kkossev      - added TS110E _TZ3210_k1msuvg6; TS0601 _TZE200_r32ctezx fan controller; changed importURL to dev. branch; dp=4 - type of light source?; added GLEDOPTO GL-SD-001; 1-gang modles bug fixes;
 ver 0.2.12 2023/03/12 kkossev      - more debug logging; fixed incorrect on/off status reporting bug for the standard ZCL dimmers; added autoRefresh option for GLEDOPTO
 ver 0.3.0  2023/03/12 kkossev      - bugfix: TS110E/F configiration for the automatic level reporting was not working.
-ver 0.4.0  2023/03/12 kkossev      - added TS110E _TZ3210_pagajpog; added advancedOptions; added forcedProfile; added deviceProfilesV2; added initialize() command; sendZigbeeCommands() in all Command handlers; configure() and updated() do not re-initialize the device!; setDeviceNameAndProfile(); destEP here and there
+ver 0.4.0  2023/03/25 kkossev      - (dev. branch) added TS110E _TZ3210_pagajpog; added advancedOptions; added forcedProfile; added deviceProfilesV2; added initialize() command; sendZigbeeCommands() in all Command handlers; configure() and updated() do not re-initialize the device!; setDeviceNameAndProfile(); destEP here and there
+ver 0.4.1  2023/03/30 kkossev      - (dev. branch) added new TS110E_GIRIER_DIMMER product profile (Girier _TZ3210_k1msuvg6 support @jshimota); installed() initialization and configuration sequence changed';
 *
-*                                   TODO: Hubitat 'F2 bug' patch
+*                                   TODO: GIRIER Toggle command is not working?
+*                                   TODO: Hubitat 'F2 bug' patched;
+*                                   TODO: TS110E_GIRIER_DIMMER TS011E power_on_behavior_1, TS110E_switch_type ['toggle', 'state', 'momentary']) (TS110E_options - needsMagic())
 *                                   TODO: Tuya Fan Switch support
-*                                   TODO: TS110E _TZ3210_k1msuvg6 support @jshimota
 *
 */
 
-def version() { "0.4.0" }
-def timeStamp() {"2023/03/25 11:45 PM"}
+def version() { "0.4.1" }
+def timeStamp() {"2023/03/25 11:18 PM"}
 
 import groovy.transform.Field
 
@@ -137,9 +139,7 @@ def isTS0601() {
             models        : ["TS110F"],
             fingerprints  : [
                 [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0005,0004,0006,0008,EF00,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_ngqk6jia", deviceJoinName: "Lonsonho 2-gang Dimmer module"],           // https://www.aliexpress.com/item/4001279149071.html
-                [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0004,0005,0003,0006,0008,EF00,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_zxbtub8r", deviceJoinName: "GIRIER Dimmer module 1 ch."],         // not tested
                 [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZE200_e3oitdyu", deviceJoinName: "Moes ZigBee Dimmer Switche 2CH"],                    // https://community.hubitat.com/t/moes-dimmer-module-2ch/110512 
-                [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0004,0005,0003,0006,0008,EF00,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_k1msuvg6", deviceJoinName: "Girier Zigbee 1-Gang Dimmer module"], // https://community.hubitat.com/t/girier-tuya-zigbee-3-0-light-switch-module-smart-diy-breaker-1-2-3-4-gang-supports-2-way-control/104546/36?u=kkossev
                 [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0005,0004,0006,0008,E001,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_pagajpog", deviceJoinName: "Lonsonho Tuya Smart Zigbee Dimmer"]        // https://community.hubitat.com/t/release-tuya-lonsonho-1-gang-and-2-gang-zigbee-dimmer-module-driver/60372/76?u=kkossev
             ],
             deviceJoinName: "TS110E Tuya Dimmer",
@@ -148,6 +148,21 @@ def isTS0601() {
             configuration : [],
             preferences   : []
     ],
+    
+    "TS110E_GIRIER_DIMMER"  : [
+            description   : "TS110E Girier Dimmers",
+            models        : ["TS110F"],
+            fingerprints  : [
+                [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0004,0005,0003,0006,0008,EF00,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_zxbtub8r", deviceJoinName: "GIRIER Dimmer module 1 ch."],         // not tested
+                [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0004,0005,0003,0006,0008,EF00,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_k1msuvg6", deviceJoinName: "Girier Zigbee 1-Gang Dimmer module"], // https://community.hubitat.com/t/girier-tuya-zigbee-3-0-light-switch-module-smart-diy-breaker-1-2-3-4-gang-supports-2-way-control/104546/36?u=kkossev
+            ],
+            deviceJoinName: "TS110E Girier Dimmer",
+            capabilities  : ["SwitchLevel": true],
+            attributes    : ["healthStatus": "unknown", "powerSource": "mains"],
+            configuration : [],
+            preferences   : []
+    ],
+    
     
     "TS0601_DIMMER"  : [
             description   : "TS0601 Tuya Dimmers",
@@ -446,6 +461,7 @@ def off() {
 
 // sends Zigbee commands to toggle the switch
 def toggle() {
+    logDebug("toggle...")
     if (isParent()) {
         sendZigbeeCommands(cmdSwitchToggle(indexToChildDni(0)))
     } else {
@@ -632,8 +648,13 @@ def parse(String description) {
         }
         //
         Integer value = 0
-        if (descMap?.value != null) {
-            value = Integer.parseInt(descMap.value, 16)
+        if (descMap?.value != null && descMap?.encoding != "42") {
+            try {
+                value = Integer.parseInt(descMap.value, 16)
+            }
+            catch (e) {
+                logWarn "exception ${e} caught while converting ${descMap?.value} to integer, encoding is ${descMap?.encoding}"
+            }
         }
         def child = this
         def isFirst = true
@@ -716,7 +737,7 @@ Tuya cluster EF00 specific code
 */
 
 def tuyaBlackMagic() {
-    def ep = safeToInt(state.destinationEP)
+    def ep = safeToInt(state.destinationEP ?: 01)
     if (ep==null || ep==0) ep = 1
     return zigbee.readAttribute(0x0000, [0x0004, 0x000, 0x0001, 0x0005, 0x0007, 0xfffe], [destEndpoint :ep], delay=200)
 }
@@ -1082,38 +1103,36 @@ def getDeviceInfo() {
     return "model=${device.getDataValue('model')} manufacturer=${device.getDataValue('manufacturer')} destinationEP=${state.destinationEP} <b>deviceProfile=${state.deviceProfile}</b>"
 }
 
-//  will be called when device is first added
+//  will be the first function called just once when paired as a new device. Not called again on consequent re-pairings !
 def installed() {
+    logDebug "<b>installed()</b> ... ${getDeviceInfo()}"
+}
+
+// called every time the device is paired to the HUB (both as new or as an existing device)
+def configure() {
+    logDebug "<b>configure()</b> ... ${getDeviceInfo()}"
     setDestinationEP()
     checkDriverVersion()
     setDeviceNameAndProfile()
-    logDebug "<b>installed()</b> ... ${getDeviceInfo()}"
+    // TuyaBlackMagic + reate child devices
     initialized()
-}
-
-def configure() {
-    logDebug "<b>configure()</b> ... ${getDeviceInfo()}"
-    // ver 1.3.1 03/25/2023 commented out
-    //return initialized()
+    updated()
 }
 
 // called on hub startup if driver specifies capability "Initialize" (otherwise is not required or automatically called if present)
 def initialize() {
     logDebug "<b>initialize()</b> ... ${getDeviceInfo()}"
-    // ver 1.3.1 03/25/2023 commented out
-    // return initialized()
 }
 
-    // version 0.3.1
-
+// called from configure()
 def setDestinationEP() {
     def ep = device.getEndpointId()
     if (ep != null && ep != 'F2') {
         state.destinationEP = ep
-        logDebug "destinationEP = ${state.destinationEP}"
+        logDebug "setDestinationEP() destinationEP = ${state.destinationEP}"
     }
     else {
-        logWarn "Destination End Point not found or invalid(${ep}), activating the F2 bug patch!"
+        logWarn "setDestinationEP() Destination End Point not found or invalid(${ep}), activating the F2 bug patch!"
         state.destinationEP = "01"    // fallback EP
     }      
 }
@@ -1198,7 +1217,7 @@ def initialized() {
     
     if (isParent()) {
         createChildDevices()   
-        if (device.getDataValue("model") == "TS0601") {
+        if (true /*device.getDataValue("model") == "TS0601"*/) {    // TODO !! must be called for TS0011E also! TODO: isTuya() !
             logDebug "spelling tuyaBlackMagic()"
             cmds += tuyaBlackMagic()
         }
@@ -1303,6 +1322,13 @@ private getPACKET_ID() {
     return randomPacketId()
 }
 
+Integer safeToInt(val, Integer defaultVal=0) {
+	return "${val}"?.isInteger() ? "${val}".toInteger() : defaultVal
+}
+
+Double safeToDouble(val, Double defaultVal=0.0) {
+	return "${val}"?.isDouble() ? "${val}".toDouble() : defaultVal
+}
 
 void sendZigbeeCommands(ArrayList<String> cmd) {
     logDebug "${device.displayName} sendZigbeeCommands(cmd=$cmd)"
