@@ -53,9 +53,8 @@ ver 0.2.11 2023/02/19 kkossev      - added TS110E _TZ3210_k1msuvg6; TS0601 _TZE2
 ver 0.2.12 2023/03/12 kkossev      - more debug logging; fixed incorrect on/off status reporting bug for the standard ZCL dimmers; added autoRefresh option for GLEDOPTO
 ver 0.3.0  2023/03/12 kkossev      - bugfix: TS110E/F configiration for the automatic level reporting was not working.
 ver 0.4.0  2023/03/25 kkossev      - (dev. branch) added TS110E _TZ3210_pagajpog; added advancedOptions; added forcedProfile; added deviceProfilesV2; added initialize() command; sendZigbeeCommands() in all Command handlers; configure() and updated() do not re-initialize the device!; setDeviceNameAndProfile(); destEP here and there
-ver 0.4.1  2023/03/30 kkossev      - (dev. branch) added new TS110E_GIRIER_DIMMER product profile (Girier _TZ3210_k1msuvg6 support @jshimota); installed() initialization and configuration sequence changed';
+ver 0.4.1  2023/03/30 kkossev      - (dev. branch) added new TS110E_GIRIER_DIMMER product profile (Girier _TZ3210_k1msuvg6 support @jshimota); installed() initialization and configuration sequence changed'; fixed GIRIER Toggle command not working;
 *
-*                                   TODO: GIRIER Toggle command is not working?
 *                                   TODO: Hubitat 'F2 bug' patched;
 *                                   TODO: TS110E_GIRIER_DIMMER TS011E power_on_behavior_1, TS110E_switch_type ['toggle', 'state', 'momentary']) (TS110E_options - needsMagic())
 *                                   TODO: Tuya Fan Switch support
@@ -63,7 +62,7 @@ ver 0.4.1  2023/03/30 kkossev      - (dev. branch) added new TS110E_GIRIER_DIMME
 */
 
 def version() { "0.4.1" }
-def timeStamp() {"2023/03/25 11:18 PM"}
+def timeStamp() {"2023/03/25 11:59 PM"}
 
 import groovy.transform.Field
 
@@ -220,8 +219,9 @@ def isTS0601() {
 def getModelGroup()          { return state.deviceProfile ?: "UNKNOWN" }
 def getDeviceProfilesMap()   {deviceProfilesV2.values().description as List<String>}
 
-def isFanController() { return getModelGroup().contains("TS0601_FAN") }               //{device.getDataValue("manufacturer") in ["_TZE200_fvldku9h", "_TZE200_r32ctezx"]}
-def isTS110E()        { return getModelGroup().contains("TS110E_DIMMER") }            // { (_DEBUG==true) || (device.getDataValue("manufacturer") in ["_TZ3210_k1msuvg6", "_TZ3210_zxbtub8r"])}
+def isFanController() { return getModelGroup().contains("TS0601_FAN") }
+def isTS110E()        { return getModelGroup().contains("TS110E_DIMMER") }
+def isGirier()        { return getModelGroup().contains("TS110E_GIRIER_DIMMER") }
 
 metadata {
     definition (
@@ -514,7 +514,7 @@ def cmdRefresh(String childDni) {
 // returns Zigbee commands to togle the switch
 def cmdSwitchToggle(String childDni) {
     def endpointId = childDniToEndpointId(childDni)
-    if (isTS0601()) {
+    if (isTS0601() || isGirier()) {
         if (device.currentState('switch', true).value == 'on') {
             return cmdSwitch(childDni, 0)
         }
@@ -1113,7 +1113,12 @@ def configure() {
     logDebug "<b>configure()</b> ... ${getDeviceInfo()}"
     setDestinationEP()
     checkDriverVersion()
-    setDeviceNameAndProfile()
+    if (state.deviceProfile == null) {
+        setDeviceNameAndProfile()
+    }
+    else {
+        logInfo "the selected ${state.deviceProfile} device profile was not changed!"
+    }
     // TuyaBlackMagic + reate child devices
     initialized()
     updated()
@@ -1122,6 +1127,8 @@ def configure() {
 // called on hub startup if driver specifies capability "Initialize" (otherwise is not required or automatically called if present)
 def initialize() {
     logDebug "<b>initialize()</b> ... ${getDeviceInfo()}"
+    initializeVars( fullInit = true )
+    configure()
 }
 
 // called from configure()
@@ -1135,6 +1142,17 @@ def setDestinationEP() {
         logWarn "setDestinationEP() Destination End Point not found or invalid(${ep}), activating the F2 bug patch!"
         state.destinationEP = "01"    // fallback EP
     }      
+}
+
+void initializeVars( boolean fullInit = false ) {
+    logInfo "InitializeVars( fullInit = ${fullInit} )..."
+    if (fullInit == true) {
+        state.clear()
+        state.driverVersion = driverVersionAndTimeStamp()
+    }
+    if (fullInit == true || state.deviceProfile == null) {
+        setDeviceNameAndProfile()
+    }
 }
 
 // will be called when user selects Save Preferences
