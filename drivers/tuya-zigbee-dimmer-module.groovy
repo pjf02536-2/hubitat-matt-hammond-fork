@@ -54,6 +54,7 @@ ver 0.2.12 2023/03/12 kkossev      - more debug logging; fixed incorrect on/off 
 ver 0.3.0  2023/03/12 kkossev      - bugfix: TS110E/F configiration for the automatic level reporting was not working.
 ver 0.4.0  2023/03/25 kkossev      - added TS110E _TZ3210_pagajpog; added advancedOptions; added forcedProfile; added deviceProfilesV2; added initialize() command; sendZigbeeCommands() in all Command handlers; configure() and updated() do not re-initialize the device!; setDeviceNameAndProfile(); destEP here and there
 ver 0.4.1  2023/03/31 kkossev      - added new TS110E_GIRIER_DIMMER product profile (Girier _TZ3210_k1msuvg6 support @jshimota); installed() initialization and configuration sequence changed'; fixed GIRIER Toggle command not working; added _TZ3210_4ubylghk
+ver 0.4.2  2023/04/01 kkossev      - (dev. branch) added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device;
 *
 *                                   TODO: Hubitat 'F2 bug' patched;
 *                                   TODO: TS110E_GIRIER_DIMMER TS011E power_on_behavior_1, TS110E_switch_type ['toggle', 'state', 'momentary']) (TS110E_options - needsMagic())
@@ -61,8 +62,8 @@ ver 0.4.1  2023/03/31 kkossev      - added new TS110E_GIRIER_DIMMER product prof
 *
 */
 
-def version() { "0.4.1" }
-def timeStamp() {"2023/03/31 12:15 AM"}
+def version() { "0.4.2" }
+def timeStamp() {"2023/04/04 12:35 AM"}
 
 import groovy.transform.Field
 
@@ -138,10 +139,7 @@ def isTS0601() {
             description   : "TS110E Tuya Dimmers",
             models        : ["TS110F"],
             fingerprints  : [
-                [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0005,0004,0006,0008,EF00,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_ngqk6jia", deviceJoinName: "Lonsonho 2-gang Dimmer module"],           // https://www.aliexpress.com/item/4001279149071.html
-                [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZE200_e3oitdyu", deviceJoinName: "Moes ZigBee Dimmer Switche 2CH"],                    // https://community.hubitat.com/t/moes-dimmer-module-2ch/110512 
-                [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0005,0004,0006,0008,E001,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_pagajpog", deviceJoinName: "Lonsonho Tuya Smart Zigbee Dimmer"],       // https://community.hubitat.com/t/release-tuya-lonsonho-1-gang-and-2-gang-zigbee-dimmer-module-driver/60372/76?u=kkossev
-                [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0005,0004,0006,0008,E001,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_4ubylghk", deviceJoinName: "Lonsonho Tuya Smart Zigbee Dimmer"]        // https://community.hubitat.com/t/driver-support-for-tuya-dimmer-module-model-ts110e-manufacturer-tz3210-4ubylghk/116077?u=kkossev
+                [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZE200_e3oitdyu", deviceJoinName: "Moes ZigBee Dimmer Switche 2CH"]                    // https://community.hubitat.com/t/moes-dimmer-module-2ch/110512 
             ],
             deviceJoinName: "TS110E Tuya Dimmer",
             capabilities  : ["SwitchLevel": true],
@@ -164,6 +162,22 @@ def isTS0601() {
             preferences   : []
     ],
     
+    "TS110E_LONSONHO_DIMMER"  : [
+            description   : "TS110E Lonsonho Dimmers",
+            models        : ["TS110F"],
+            fingerprints  : [
+                [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0005,0004,0006,0008,EF00,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_ngqk6jia", deviceJoinName: "Lonsonho 2-gang Dimmer module"],           // https://www.aliexpress.com/item/4001279149071.html
+                [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0005,0004,0006,0008,E001,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_pagajpog", deviceJoinName: "Lonsonho Tuya Smart Zigbee Dimmer"],       // https://community.hubitat.com/t/release-tuya-lonsonho-1-gang-and-2-gang-zigbee-dimmer-module-driver/60372/76?u=kkossev
+                [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0005,0004,0006,0008,E001,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_4ubylghk", deviceJoinName: "Lonsonho Tuya Smart Zigbee Dimmer"]        // https://community.hubitat.com/t/driver-support-for-tuya-dimmer-module-model-ts110e-manufacturer-tz3210-4ubylghk/116077?u=kkossev
+            ],
+            deviceJoinName: "TS110E Lonsonho Dimmer",
+            capabilities  : ["SwitchLevel": true],
+            attributes    : ["healthStatus": "unknown", "powerSource": "mains"],
+            configuration : [],
+            preferences   : []
+    ],
+    
+     
     
     "TS0601_DIMMER"  : [
             description   : "TS0601 Tuya Dimmers",
@@ -625,7 +639,7 @@ def doActions(List<String> cmds) {
 
 def parse(String description) {
     checkDriverVersion()
-    logDebug "Received raw: ${description}"
+    logDebug "Received raw description: ${description}"
 
     if (isParent()) {
         def descMap = [:]
@@ -700,12 +714,18 @@ def parse(String description) {
                     logDebug "Received ZCL Command Response for cluster ${descMap.clusterId} command ${clusterCmd}, data=${descMap.data} (Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
                     break
                 }
-                logDebug "switch level cluster 0x0008 command ${descMap?.command} attrId ${descMap?.attrId} value ${value}"
+                logDebug "switch level cluster 0x0008 endpoint ${descMap?.endpoint} command ${descMap?.command} attrId ${descMap?.attrId} value raw ${value})"
                 if (descMap?.attrId == "0000" || descMap?.attrId == "F000") {
-                    child.onSwitchLevel(value)
+                    logDebug "child.onSwitchLevel value=${((value/10) as int)} child=${child}"
+                    if (child != null) {
+                        child.onSwitchLevel((value/10) as int)
+                    }
+                    else {
+                        logWarn "child is null for endpoint ${descMap?.endpoint}"
+                    }
                     if (isFirst && child != this) {
                         logDebug "Replicating switchLevel in parent"
-                        onSwitchLevel(value)
+                        onSwitchLevel((value/10) as int)
                     }
                 } else if (descMap?.attrId == "FC02") {
                     //value = hexStrToUnsignedInt(descMap.value)
@@ -717,6 +737,9 @@ def parse(String description) {
                 } else if (descMap?.attrId == "FC04") {
                     logInfo "maxLevel is '${TS110ELightTypeOptions.options[value]}' (0x${descMap.value})"
                     //device.updateSetting('maxLevel', [value: value, type: 'number'])
+                }
+                else {
+                    logDebug "UNPROCESSED switch level cluster 0x0008 command ${descMap?.command} attrId ${descMap?.attrId} value raw: (${value})"
                 }
                 break
             case 0x8021: 
@@ -973,9 +996,9 @@ def onSwitchState(value) {
 }
 
 def onSwitchLevel(value) {
-    def level = valueToLevel(value.toInteger())    // TODO - null pointer exception! https://community.hubitat.com/t/girier-tuya-zigbee-3-0-dimmable-1-gang-switch-w-neutral/112620/10?u=kkossev 
+    def level = valueToLevel(safeToInt(value))    // TODO - null pointer exception! https://community.hubitat.com/t/girier-tuya-zigbee-3-0-dimmable-1-gang-switch-w-neutral/112620/10?u=kkossev 
     logDebug "onSwitchLevel: Value=${value} level=${level} (value=${value})"
-    
+    logInfo "${device.displayName} set level ${level} %"
     sendEvent(name:"level", value: level, descriptionText:"${device.displayName} set ${level}%", unit: "%")
 }
     
@@ -1454,7 +1477,6 @@ def zTest( dpCommand, dpValue, dpTypeString ) {
 def test(String description) {
     log.warn "test parsing : ${description}"
     parse( description)
-    setDestinationEP() 
 }
 
 
