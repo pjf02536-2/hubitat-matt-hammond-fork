@@ -54,7 +54,7 @@ ver 0.2.12 2023/03/12 kkossev      - more debug logging; fixed incorrect on/off 
 ver 0.3.0  2023/03/12 kkossev      - bugfix: TS110E/F configiration for the automatic level reporting was not working.
 ver 0.4.0  2023/03/25 kkossev      - added TS110E _TZ3210_pagajpog; added advancedOptions; added forcedProfile; added deviceProfilesV2; added initialize() command; sendZigbeeCommands() in all Command handlers; configure() and updated() do not re-initialize the device!; setDeviceNameAndProfile(); destEP here and there
 ver 0.4.1  2023/03/31 kkossev      - added new TS110E_GIRIER_DIMMER product profile (Girier _TZ3210_k1msuvg6 support @jshimota); installed() initialization and configuration sequence changed'; fixed GIRIER Toggle command not working; added _TZ3210_4ubylghk
-ver 0.4.2  2023/04/02 kkossev      - (dev. branch) added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device; all Current States are cleared on Initialize
+ver 0.4.2  2023/04/02 kkossev      - (dev. branch) added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device; all Current States are cleared on Initialize; Lonsonho brightness control
 *
 *                                   TODO: Hubitat 'F2 bug' patched;
 *                                   TODO: TS110E_GIRIER_DIMMER TS011E power_on_behavior_1, TS110E_switch_type ['toggle', 'state', 'momentary']) (TS110E_options - needsMagic())
@@ -63,7 +63,7 @@ ver 0.4.2  2023/04/02 kkossev      - (dev. branch) added TS110E_LONSONHO_DIMMER;
 */
 
 def version() { "0.4.2" }
-def timeStamp() {"2023/04/02 9:27 AM"}
+def timeStamp() {"2023/04/02 10:24 AM"}
 
 import groovy.transform.Field
 
@@ -564,7 +564,7 @@ def cmdSwitch(String childDni, onOff) {
    return cmds
 }
 
-// returns Zigbee commands for level control
+// returns Zigbee commands for level control, depending on the device profile, as per the already scaled value
 def cmdSetLevel(String childDni, value, duration) {
     def endpointId = childDniToEndpointId(childDni)
     value = value.toInteger()
@@ -574,8 +574,11 @@ def cmdSetLevel(String childDni, value, duration) {
     duration = (duration * 10).toInteger()
     def child = getChildByEndpointId(endpointId)
     logDebug "cmdSetLevel: child=${child} childDni=${childDni} value=${value} duration=${duration}"
+    
+    ArrayList<String> cmdsTuya = []
+    ArrayList<String> cmdTS011 = []
+    
     if (isTS0601()) {
-        ArrayList<String> cmdsTuya = []
         value = (value*10) as int 
         def dpValHex  = zigbee.convertToHexString(value as int, 8) 
         def cmd = childDni[-2..-1]
@@ -584,25 +587,35 @@ def cmdSetLevel(String childDni, value, duration) {
             dpCommand = "04"
             dpValHex  = zigbee.convertToHexString((value/10) as int, 8) 
         }
-        logDebug "${device.displayName}  sending cmdSetLevel command=${dpCommand} value=${value} ($dpValHex)"
+        logDebug "TS0601: sending cmdSetLevel command=${dpCommand} value=${value} ($dpValHex)"
         cmdsTuya = sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
         if (child.isAutoOn() && device.currentState('switch', true).value != 'on') {
             logDebug "${device.displayName} AutoOn(): sending cmdSwitch on for switch #${endpointId}"
             cmdsTuya += cmdSwitch(childDni, 1)
         }
-        logDebug "cmdSetLevel: sending cmdsTuya=${cmdsTuya}"
+        logDebug "TS0601 cmdSetLevel: sending cmdsTuya=${cmdsTuya}"
         return cmdsTuya
     }
-    
-    def cmd = [
-        "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 4 { 0x${intTo8bitUnsignedHex(value)} 0x${intTo16bitUnsignedHex(duration)} }",
-    ]
+    else if (isLonsonho()) {
+        // Lonsonho brightness values are * 10
+        value = value * 10
+        cmdTS011 = [
+            "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0xF000 4 { 0x${intTo8bitUnsignedHex(value)} 0x${intTo16bitUnsignedHex(duration)} }",
+        ]
+        logDebug "LONSONHO: cmdSetLevel: sending value ${value} cmdTS011=${cmdTS011}"
+    }
+    else {
+        cmdTS011 = [
+            "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 4 { 0x${intTo8bitUnsignedHex(value)} 0x${intTo16bitUnsignedHex(duration)} }",
+        ]
+        logDebug "GIRIER/others: cmdSetLevel: sending value ${value} cmdTS011=${cmdTS011}"
+    }
     
     if (child.isAutoOn()) {
-        cmd += "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 1 {}"
+        cmdTS011 += "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 1 {}"
     }
-    logDebug "cmdSetLevel: sending cmds=${cmd}"
-    return cmd
+    logDebug "cmdSetLevel: sending cmdTS011=${cmdTS011}"
+    return cmdTS011
 }
 
 /*
@@ -1104,7 +1117,7 @@ def levelToValue(Integer level) {
         mult = 1.0
     }
     else if (isLonsonho()) {
-        mult = 10
+        mult = 1.0
     }
     else {
         mult =  2.55
@@ -1129,7 +1142,7 @@ def valueToLevel(Integer value) {
         mult = 1.0
     }
     else if (isLonsonho()) {
-        mult = 10
+        mult = 1.0
     }
     else {
         mult =  2.55
