@@ -54,7 +54,7 @@ ver 0.2.12 2023/03/12 kkossev      - more debug logging; fixed incorrect on/off 
 ver 0.3.0  2023/03/12 kkossev      - bugfix: TS110E/F configiration for the automatic level reporting was not working.
 ver 0.4.0  2023/03/25 kkossev      - added TS110E _TZ3210_pagajpog; added advancedOptions; added forcedProfile; added deviceProfilesV2; added initialize() command; sendZigbeeCommands() in all Command handlers; configure() and updated() do not re-initialize the device!; setDeviceNameAndProfile(); destEP here and there
 ver 0.4.1  2023/03/31 kkossev      - added new TS110E_GIRIER_DIMMER product profile (Girier _TZ3210_k1msuvg6 support @jshimota); installed() initialization and configuration sequence changed'; fixed GIRIER Toggle command not working; added _TZ3210_4ubylghk
-ver 0.4.2  2023/04/01 kkossev      - (dev. branch) added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device;
+ver 0.4.2  2023/04/02 kkossev      - (dev. branch) added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device; all Current States are cleared on Initialize
 *
 *                                   TODO: Hubitat 'F2 bug' patched;
 *                                   TODO: TS110E_GIRIER_DIMMER TS011E power_on_behavior_1, TS110E_switch_type ['toggle', 'state', 'momentary']) (TS110E_options - needsMagic())
@@ -63,7 +63,7 @@ ver 0.4.2  2023/04/01 kkossev      - (dev. branch) added TS110E_LONSONHO_DIMMER;
 */
 
 def version() { "0.4.2" }
-def timeStamp() {"2023/04/04 12:35 AM"}
+def timeStamp() {"2023/04/02 9:27 AM"}
 
 import groovy.transform.Field
 
@@ -106,15 +106,6 @@ import groovy.transform.Field
     
 def config() {
     return modelConfigs[device.getDataValue("manufacturer")]
-}
-
-def isTS0601() {
-    if (isParent()) {
-        return device.getDataValue('model') == "TS0601"
-    }
-    else {
-        return parent?.device.getDataValue('model') == "TS0601"    
-    }
 }
 
 @Field static final Map deviceProfilesV2 = [
@@ -162,8 +153,8 @@ def isTS0601() {
             preferences   : []
     ],
     
-    "TS110E_LONSONHO_DIMMER"  : [
-            description   : "TS110E Lonsonho Dimmers",
+    "TS110E_LONSONHO_DIMMER"  : [    // uses 0xF000 (cluster 8) for brightness control // TODO: 0, 1000 -> 1, 254 (don't go to 255!!) // (uint16) # 0xF000 reported values are 10-1000, must be converted to 0-254  => value = (value + 4 - 10) * 254 // (1000 - 10) 
+            description   : "TS110E Lonsonho Dimmers",        // https://github.com/zigpy/zha-device-handlers/blob/5bbe4e0c668d826baeed178e4085b98d2a5d1740/zhaquirks/tuya/ts110e.py
             models        : ["TS110F"],
             fingerprints  : [
                 [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0005,0004,0006,0008,EF00,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_ngqk6jia", deviceJoinName: "Lonsonho 2-gang Dimmer module"],           // https://www.aliexpress.com/item/4001279149071.html
@@ -176,8 +167,6 @@ def isTS0601() {
             configuration : [],
             preferences   : []
     ],
-    
-     
     
     "TS0601_DIMMER"  : [
             description   : "TS0601 Tuya Dimmers",
@@ -232,12 +221,13 @@ def isTS0601() {
     ]    
 ]
 
-def getModelGroup()          { return state.deviceProfile ?: "UNKNOWN" }
-def getDeviceProfilesMap()   {deviceProfilesV2.values().description as List<String>}
-
-def isFanController() { return getModelGroup().contains("TS0601_FAN") }
-def isTS110E()        { return getModelGroup().contains("TS110E_DIMMER") }
-def isGirier()        { return getModelGroup().contains("TS110E_GIRIER_DIMMER") }
+def getModelGroup()        { return state.deviceProfile ?: "UNKNOWN" }
+def getDeviceProfilesMap() {deviceProfilesV2.values().description as List<String>}
+def isTS0601()             { return getModelGroup().contains("TS0601") }
+def isFanController()      { return getModelGroup().contains("TS0601_FAN") }
+def isTS110E()             { return getModelGroup().contains("TS110E_DIMMER") }
+def isGirier()             { return getModelGroup().contains("TS110E_GIRIER_DIMMER") }
+def isLonsonho()           { return getModelGroup().contains("TS110E_LONSONHO_DIMMER") }
 
 metadata {
     definition (
@@ -283,11 +273,11 @@ metadata {
         input "autoOn", "bool", title: "<b>Turn on when level adjusted</b>", description: "<i>Switch turns on automatically when dimmer level is adjusted.</i>", required: true, multiple: false, defaultValue: true
         input "autoRefresh", "bool", title: "<b>Auto refresh when level adjusted</b>", description: "<i>Automatically send an Refresh command when dimmer level is adjusted.</i>", required: true, multiple: false, defaultValue: false
         
-        input "minLevel", "number", title: "<b>Minimum level</b>", description: "<i>Minimum brightness level (%). 0% on the dimmer level is mapped to this.</i>", required: true, multiple: false, defaultValue: 0
+        input "minLevel", "number", title: "<b>Minimum level</b>", description: "<i>Minimum brightness level (%). 0% on the dimmer level is mapped to this.</i>", required: true, multiple: false, defaultValue: DEFAULT_MIN_LEVEL
             if (minLevel < 0) { minLevel = 0 } else if (minLevel > 99) { minLevel = 99 }
 
-        input "maxLevel", "number", title: "<b>Maximum level</b>", description: "<i>Maximum brightness level (%). 100% on the dimmer level is mapped to this.</i>", required: true, multiple: false, defaultValue: 100
-        if (maxLevel < minLevel) { maxLevel = 100 } else if (maxLevel > 100) { maxLevel = 100 }
+        input "maxLevel", "number", title: "<b>Maximum level</b>", description: "<i>Maximum brightness level (%). 100% on the dimmer level is mapped to this.</i>", required: true, multiple: false, defaultValue: DEFAULT_MAX_LEVEL
+        if (maxLevel < minLevel) { maxLevel = DEFAULT_MAX_LEVEL } else if (maxLevel > DEFAULT_MAX_LEVEL) { maxLevel = DEFAULT_MAX_LEVEL }
         /*
         if (isTS110E()) {
             input name: 'lightType', type: 'enum', title: '<b>Light Type</b>', options: TS110ELightTypeOptions.options, defaultValue: TS110ELightTypeOptions.defaultValue, description: \
@@ -306,7 +296,14 @@ metadata {
     }
 }
 
-@Field static final int TS110E_BRIGHTNESS = 0xF000            // (61440)       // TODO: 0, 1000 -> 1, 254 (don't go to 255!!) - Check - probably the brightness is controlled on attribute 0xF000 (cluster 8)!!!   
+@Field static final int DEFAULT_MIN_LEVEL = 0
+@Field static final int DEFAULT_MAX_LEVEL = 100
+@Field static final int TS110E_LONSONHO_LEVEL_ATTR = 0xF000        // (61440) 
+@Field static final int TS110E_LONSONHO_BULB_TYPE_ATTR = 0xFC02
+@Field static final int TS110E_LONSONHO_MIN_LEVEL_ATTR = 0xFC03
+@Field static final int TS110E_LONSONHO_MAX_LEVEL_ATTR = 0xFC04
+@Field static final int TS110E_LONSONHO_CUSTOM_LEVEL_CMD = 0x00F0
+
 @Field static final Map TS110ESwitchTypeOptions = [           // 0xFC00 (64512)
     defaultValue: 0,
     options     : [0: 'momentary', 1: 'toggle', 2: 'state']
@@ -716,16 +713,22 @@ def parse(String description) {
                 }
                 logDebug "switch level cluster 0x0008 endpoint ${descMap?.endpoint} command ${descMap?.command} attrId ${descMap?.attrId} value raw ${value})"
                 if (descMap?.attrId == "0000" || descMap?.attrId == "F000") {
-                    logDebug "child.onSwitchLevel value=${((value/10) as int)} child=${child}"
+                    if (isLonsonho()) {
+                        value = (value / 10) as int
+                        logDebug "LONSONHO: child.onSwitchLevel value=${value} child=${child}"
+                    }
+                    else {
+                        logDebug "Tuya/Girier: child.onSwitchLevel value=${value} child=${child}"
+                    }
                     if (child != null) {
-                        child.onSwitchLevel((value/10) as int)
+                        child.onSwitchLevel((value) as int)
                     }
                     else {
                         logWarn "child is null for endpoint ${descMap?.endpoint}"
                     }
                     if (isFirst && child != this) {
                         logDebug "Replicating switchLevel in parent"
-                        onSwitchLevel((value/10) as int)
+                        onSwitchLevel(value)
                     }
                 } else if (descMap?.attrId == "FC02") {
                     //value = hexStrToUnsignedInt(descMap.value)
@@ -1094,11 +1097,23 @@ def levelToValue(BigDecimal level) {
     return levelToValue(level.toInteger())
 }
 
+// converts Hubitat level 0..100 to device brightness level ( 0..255, 0..100 depending on the device profile)  
 def levelToValue(Integer level) {
-    def mult = isTS0601() ? 1.0 : 2.55 
-    Integer minValue = Math.round(settings.minLevel * mult)
-    Integer maxValue = Math.round(settings.maxLevel * mult)
-    def reScaled =  rescale(level, 0, 100, minValue, maxValue)
+    def mult = 1.0F
+    if (isTS0601()) {// ? 1.0 : 2.55 
+        mult = 1.0
+    }
+    else if (isLonsonho()) {
+        mult = 10
+    }
+    else {
+        mult =  2.55
+    }
+    Integer minLevel100 = Math.round((settings.minLevel ?: DEFAULT_MIN_LEVEL) * mult)
+    Integer maxLevel100 = Math.round((settings.maxLevel ?: DEFAULT_MAX_LEVEL) * mult)
+    
+    log.trace "mult=${mult}, minLevel100=${minLevel100}, maxLevel100=${maxLevel100}"
+    def reScaled =  rescale(level, 0, 100, minLevel, maxLevel100)
     logDebug "level=${level} reScaled=${reScaled}"
     return reScaled
 }
@@ -1107,14 +1122,27 @@ def valueToLevel(BigDecimal value) {
     return valueToLevel(value.toInteger())
 }
 
+// converts device brightness value 0..255 to Hubitat re-scaled level 0..100    //  # 0xF000 reported values are 10-1000 -> divided by 10 = 1-100
 def valueToLevel(Integer value) {
-    def mult = isTS0601() ? 1.0 : 2.55 
-    Integer minValue = Math.round(settings.minLevel * mult)
-    Integer maxValue = Math.round(settings.maxLevel * mult)
-    if (value < minValue) return 0
-    if (value > maxValue) return 100
-    def reScaled = rescale(value, minValue, maxValue, 0, 100)
-    logDebug "value=${value} reScaled=${reScaled}"
+    def mult = 1.0F
+    if (isTS0601()) {// ? 1.0 : 2.55 
+        mult = 1.0
+    }
+    else if (isLonsonho()) {
+        mult = 10
+    }
+    else {
+        mult =  2.55
+    }
+    Integer minValue255 = Math.round((settings.minLevel ?: DEFAULT_MIN_LEVEL) * mult)
+    Integer maxValue255 = Math.round((settings.maxLevel ?: DEFAULT_MAX_LEVEL) * mult)
+    log.trace "mult=${mult}, minValue255=${minValue255}, maxValue255=${maxValue255}"
+    
+    if (value < minValue255) value = minValue255
+    if (value > maxValue255) value = maxValue255
+    
+    def reScaled = rescale(value, minValue255, maxValue255, 0, 100)
+    logDebug "raw value:${value} reScaled=${reScaled}"
     return reScaled
 }
 
@@ -1172,12 +1200,18 @@ def setDestinationEP() {
 void initializeVars( boolean fullInit = false ) {
     logInfo "InitializeVars( fullInit = ${fullInit} )..."
     if (fullInit == true) {
+        unschedule()
         state.clear()
+        device.deleteCurrentState()
         state.driverVersion = driverVersionAndTimeStamp()
     }
     if (fullInit == true || state.deviceProfile == null) {
         setDeviceNameAndProfile()
     }
+    if (fullInit == true || settings.logEnable == null) device.updateSetting("logEnable", DEFAULT_DEBUG_OPT)
+    if (fullInit == true || settings.txtEnable == null) device.updateSetting("txtEnable", true)
+    if (fullInit == true || settings?.minLevel == null) device.updateSetting("minLevel", [value:DEFAULT_MIN_LEVEL, type:"number"]) 
+    if (fullInit == true || settings?.maxLevel == null) device.updateSetting("maxLevel", [value:DEFAULT_MAX_LEVEL, type:"number"]) 
 }
 
 // will be called when user selects Save Preferences
