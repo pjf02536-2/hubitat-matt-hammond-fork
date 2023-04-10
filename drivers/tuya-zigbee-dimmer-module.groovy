@@ -54,7 +54,7 @@ ver 0.2.12 2023/03/12 kkossev      - more debug logging; fixed incorrect on/off 
 ver 0.3.0  2023/03/12 kkossev      - bugfix: TS110E/F configiration for the automatic level reporting was not working.
 ver 0.4.0  2023/03/25 kkossev      - added TS110E _TZ3210_pagajpog; added advancedOptions; added forcedProfile; added deviceProfilesV2; added initialize() command; sendZigbeeCommands() in all Command handlers; configure() and updated() do not re-initialize the device!; setDeviceNameAndProfile(); destEP here and there
 ver 0.4.1  2023/03/31 kkossev      - added new TS110E_GIRIER_DIMMER product profile (Girier _TZ3210_k1msuvg6 support @jshimota); installed() initialization and configuration sequence changed'; fixed GIRIER Toggle command not working; added _TZ3210_4ubylghk
-ver 0.4.2  2023/04/10 kkossev      - (dev. branch) added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device; all Current States are cleared on Initialize; Lonsonho brightness control; Hubitat 'F2 bug' patched;
+ver 0.4.2  2023/04/10 kkossev      - (dev. branch) added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device; all Current States are cleared on Initialize; Lonsonho brightness control; Hubitat 'F2 bug' patched; Lonsonho change level uses cluster 0x0008
 *
 *                                   TODO: add 'Health Check' capability and scheduled jobs
 *                                   TODO: TS110E_GIRIER_DIMMER TS011E power_on_behavior_1, TS110E_switch_type ['toggle', 'state', 'momentary']) (TS110E_options - needsMagic())
@@ -64,7 +64,7 @@ ver 0.4.2  2023/04/10 kkossev      - (dev. branch) added TS110E_LONSONHO_DIMMER;
 */
 
 def version() { "0.4.2" }
-def timeStamp() {"2023/04/09 12:44 PM"}
+def timeStamp() {"2023/04/09 2:41 PM"}
 
 import groovy.transform.Field
 
@@ -601,6 +601,7 @@ def cmdSetLevel(String childDni, value, duration) {
         // Lonsonho brightness values are * 10       // unsigned 16 bit int 
         value = value * 10
         cmdTS011 = [
+            "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 4  { 0x${intTo16bitUnsignedHex(value)} 0x${intTo16bitUnsignedHex(duration)} }",
             "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0xF000 4  { 0x${intTo16bitUnsignedHex(value)} 0x${intTo16bitUnsignedHex(duration)} }",
         ]
         logDebug "LONSONHO: cmdSetLevel: sending value ${value} cmdTS011=${cmdTS011}"
