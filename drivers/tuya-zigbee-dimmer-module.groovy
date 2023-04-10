@@ -59,12 +59,12 @@ ver 0.4.2  2023/04/10 kkossev      - (dev. branch) added TS110E_LONSONHO_DIMMER;
 *                                   TODO: add 'Health Check' capability and scheduled jobs
 *                                   TODO: TS110E_GIRIER_DIMMER TS011E power_on_behavior_1, TS110E_switch_type ['toggle', 'state', 'momentary']) (TS110E_options - needsMagic())
 *                                   TODO: Tuya Fan Switch support
-*                                   TODO: 
+*                                   TODO: add TS110E 'light_type', 'switch_type']
 *
 */
 
 def version() { "0.4.2" }
-def timeStamp() {"2023/04/09 7:28 AM"}
+def timeStamp() {"2023/04/09 12:44 PM"}
 
 import groovy.transform.Field
 
@@ -331,14 +331,14 @@ def createChildDevices() {
     
     if (numEps == 1) {
         numEps = 0
-        logDebug "single channel dimmer, no child devices are needed"
+        logDebug "createChildDevices: single channel dimmer, no child devices are needed"
     } else {
-        logDebug "about to delete the child devices:  ${numEps} expected , found ${getChildDevices().size()}"
+        logDebug "createChildDevices: about to delete the child devices:  ${numEps} expected , found ${getChildDevices().size()}"
     }
 
     def index = getChildDevices().size()
     if (index == null || index == 0)   {
-        logDebug "no child devices to be deleted"
+        logDebug "createChildDevices: no child devices to be deleted"
     }
     else {
         for (int i=0; i<index; i++) {
@@ -348,16 +348,16 @@ def createChildDevices() {
                 deleteChildDevice(dni)    
             }
             else {
-                logDebug "child device ${i} DNI was not found!"
+                logDebug "createChildDevices: child device ${i} DNI was not found!"
             }
         }
     }
     if (numEps <= 1) {
-        logDebug "no child devices to be created"
+        logDebug "createChildDevices: no child devices to be created"
         return
     }
     
-    logDebug "about to create ${numEps} child devices"   
+    logDebug "createChildDevices: about to create ${numEps} child devices"   
     for (int i=0; i<numEps; i++) {
         // create child devices
         def dni = indexToChildDni(i)
@@ -385,9 +385,9 @@ def listenChildDevices() {
     if (isTS0601()) {
         return null
     }
-    logDebug "listenChildDevices(): getChildEndpointIds() = ${getChildEndpointIds()} size=${getChildEndpointIds().size()}"
+    logDebug "listenChildDevices: getChildEndpointIds() = ${getChildEndpointIds()} size=${getChildEndpointIds().size()}"
     getChildEndpointIds().each{ endpointId ->
-        //logDebug "endpointId = ${endpointId}"
+        //log.trace "endpointId = ${endpointId}"
         if (endpointId != null && endpointId != 0 && endpointId != 0xF2) {
             cmds += [
                 //bindings
@@ -399,7 +399,7 @@ def listenChildDevices() {
             ] + cmdRefresh(endpointIdToChildDni(endpointId))
         }
     }
-    logDebug "returning binding and reporting configuration commands: ${cmds}"
+    logDebug "listenChildDevices: returning binding and reporting configuration commands: ${cmds}"
     return cmds
 }
 
@@ -418,7 +418,7 @@ def onChildSettingsChange(childDni, childSettings) {
         device.updateSetting("autoOn",childSettings.autoOn)
     }
     else {
-        logWarn "skipped onChildSettingsChange() for child device #${i+1}"
+        logWarn "onChildSettingsChange: skipped onChildSettingsChange() for child device #${i+1}"
     }
 }
 
@@ -446,11 +446,11 @@ if parent, then act on endpoint 1
 // sends Zigbee commands to refresh the switch and the level
 def refresh() {
     if (isParent()) {
-        logDebug "refresh(): parent ${indexToChildDni(0)}"
+        logDebug "refresh: parent ${indexToChildDni(0)}"
         ArrayList<String> cmds = cmdRefresh(indexToChildDni(0))
         sendZigbeeCommands(cmds)
     } else {
-        logDebug "refresh(): child ${device.deviceNetworkId}"
+        logDebug "refresh: child ${device.deviceNetworkId}"
         parent?.doActions( parent?.cmdRefresh(device.deviceNetworkId) )
     }
 }
@@ -475,7 +475,7 @@ def off() {
 
 // sends Zigbee commands to toggle the switch
 def toggle() {
-    logDebug("toggle...")
+    logDebug("toggle: ...")
     if (isParent()) {
         sendZigbeeCommands(cmdSwitchToggle(indexToChildDni(0)))
     } else {
@@ -509,7 +509,7 @@ Hub Action (cmd) generators - only return ArrayList<String> Zigbee commands to t
 // returns Zigbee commands to refresh the switch and the level
 def cmdRefresh(String childDni) {
     def endpointId = childDniToEndpointId(childDni)
-    logDebug "cmdRefresh(childDni=${childDni} endpointId=${endpointId})  isParent()=${isParent()}"
+    logDebug "cmdRefresh: (childDni=${childDni} endpointId=${endpointId})  isParent()=${isParent()}"
     // changed 03/25/2023 - always try to refresh clusters 6 & 8, even for Tuya switches... do not return null!
     /*
     if (isTS0601()) {
@@ -556,11 +556,11 @@ def cmdSwitch(String childDni, onOff) {
         def cmd = childDni[-2..-1]
         def dpCommand = cmd == "01" ? "01" : cmd == "02" ? "07" : cmd == "03" ? "0F" : null
         cmds = sendTuyaCommand(dpCommand, DP_TYPE_BOOL, dpValHex)       
-        logDebug "${device.displayName}  sending cmdSwitch command=${dpCommand} value=${onOff} ($dpValHex) cmds=${cmds}"
+        logDebug "cmdSwitch: sending cmdSwitch command=${dpCommand} value=${onOff} ($dpValHex) cmds=${cmds}"
     }
     else {
         cmds = ["he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 ${onOff} {}"]
-        logDebug "${device.displayName}  sending cmdSwitch endpointId=${endpointId} value=${onOff} cmds=${cmds}"
+        logDebug "cmdSwitch: sending cmdSwitch endpointId=${endpointId} value=${onOff} cmds=${cmds}"
     }
    return cmds
 }
@@ -588,24 +588,24 @@ def cmdSetLevel(String childDni, value, duration) {
             dpCommand = "04"
             dpValHex  = zigbee.convertToHexString((value/10) as int, 8) 
         }
-        logDebug "TS0601: sending cmdSetLevel command=${dpCommand} value=${value} ($dpValHex)"
+        logDebug "cmdSetLevel: TS0601: sending cmdSetLevel command=${dpCommand} value=${value} ($dpValHex)"
         cmdsTuya = sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
         if (child.isAutoOn() && device.currentState('switch', true).value != 'on') {
-            logDebug "${device.displayName} AutoOn(): sending cmdSwitch on for switch #${endpointId}"
+            logDebug "cmdSetLevel: AutoOn: sending cmdSwitch on for switch #${endpointId}"
             cmdsTuya += cmdSwitch(childDni, 1)
         }
-        logDebug "TS0601 cmdSetLevel: sending cmdsTuya=${cmdsTuya}"
+        logDebug "cmdSetLevel: TS0601: sending cmdsTuya=${cmdsTuya}"
         return cmdsTuya
     }
     else if (isLonsonho()) {
         // Lonsonho brightness values are * 10       // unsigned 16 bit int 
         value = value * 10
         cmdTS011 = [
-            "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0xF000 4 { 0x${intTo16bitUnsignedHex(value)} 0x${intTo16bitUnsignedHex(duration)} }",
+            "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0xF000 4  { 0x${intTo16bitUnsignedHex(value)} 0x${intTo16bitUnsignedHex(duration)} }",
         ]
         logDebug "LONSONHO: cmdSetLevel: sending value ${value} cmdTS011=${cmdTS011}"
     }
-    else {
+    else { // all other dimmers, different that EF00 and Lonsonho
         cmdTS011 = [
             "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 4 { 0x${intTo8bitUnsignedHex(value)} 0x${intTo16bitUnsignedHex(duration)} }",
         ]
@@ -641,7 +641,7 @@ def doActions(List<String> cmds) {
         }
         sendHubCommand(allActions)
 */
-        logDebug "Sending actions: ${cmds}"
+        logDebug "doActions: Sending actions: ${cmds}"
     } else {
         throw new Exception("doActions() called incorrectly by child")
     }
@@ -650,7 +650,7 @@ def doActions(List<String> cmds) {
 
 def parse(String description) {
     checkDriverVersion()
-    logDebug "Received raw description: ${description}"
+    logDebug "parse: received raw description: ${description}"
 
     if (isParent()) {
         def descMap = [:]
@@ -660,9 +660,9 @@ def parse(String description) {
         catch (e) {
             logWarn "exception ${e} caught while parsing description:  ${description}"
         }
-        logDebug "Received descMap: ${descMap}"
+        logDebug "parse: received descMap: ${descMap}"
         if (description.startsWith("catchall")) {
-            logDebug "catchall clusterId=${descMap?.clusterId} command=${descMap?.command} data=${descMap?.data}"
+            logDebug "parse: catchall clusterId=${descMap?.clusterId} command=${descMap?.command} data=${descMap?.data}"
             if (descMap?.clusterId == "EF00") {
                 return parseTuyaCluster(descMap)
             }
@@ -695,44 +695,44 @@ def parse(String description) {
                 parseBasicCluster( descMap )
                 break
             case 0x0006: // switch state
-            logDebug "on/off cluster 0x0006 command ${descMap?.command} value ${value}"
+            logDebug "parse: on/off cluster 0x0006 command ${descMap?.command} value ${value}"
                 if (descMap?.command == "07" && descMap?.data.size() >= 1) {
-                    logDebug "Received Configure Reporting Response for cluster:${descMap.clusterId} , data=${descMap.data} (Status: ${descMap.data[0]=="00" ? 'Success' : '<b>Failure</b>'})"
+                    logDebug "parse: received Configure Reporting Response for cluster:${descMap.clusterId} , data=${descMap.data} (Status: ${descMap.data[0]=="00" ? 'Success' : '<b>Failure</b>'})"
                     break
                 }
                 if (descMap?.command == "0B" && descMap?.data.size() >= 2) {
                     String clusterCmd = descMap.data[0]
                     def status = descMap.data[1]
-                    logDebug "Received ZCL Command Response for cluster ${descMap.clusterId} command ${clusterCmd}, data=${descMap.data} (Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
+                    logDebug "parse: received ZCL Command Response for cluster ${descMap.clusterId} command ${clusterCmd}, data=${descMap.data} (Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
                     break
                 }
                 child.onSwitchState(value)
                 if (isFirst && child != this) {
-                    logDebug "Replicating switchState in parent"
+                    logDebug "parse: replicating switchState in parent"
                     onSwitchState(value)
                 } else {
-                    logDebug "${isFirst} ${this} ${child} ${value}"
+                    logDebug "parse: isFirst=${isFirst} this=${this} child=${child} value=${value}"
                 }
                 break
             case 0x0008: // switch level state
                 if (descMap?.command == "07" && descMap?.data.size() >= 1) {
-                    logDebug "Received Configure Reporting Response for cluster:${descMap.clusterId} , data=${descMap.data} (Status: ${descMap.data[0]=="00" ? 'Success' : '<b>Failure</b>'})"
+                    logDebug "parse: received Configure Reporting Response for cluster:${descMap.clusterId} , data=${descMap.data} (Status: ${descMap.data[0]=="00" ? 'Success' : '<b>Failure</b>'})"
                     break
                 }
                 if (descMap?.command == "0B" && descMap?.data.size() >= 2) {
                     String clusterCmd = descMap.data[0]
                     def status = descMap.data[1]
-                    logDebug "Received ZCL Command Response for cluster ${descMap.clusterId} command ${clusterCmd}, data=${descMap.data} (Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
+                    logDebug "parse: received ZCL Command Response for cluster ${descMap.clusterId} command ${clusterCmd}, data=${descMap.data} (Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
                     break
                 }
-                logDebug "switch level cluster 0x0008 endpoint ${descMap?.endpoint} command ${descMap?.command} attrId ${descMap?.attrId} value raw ${value})"
+                logDebug "parse: switch level cluster 0x0008 endpoint ${descMap?.endpoint} command ${descMap?.command} attrId ${descMap?.attrId} value raw ${value})"
                 if (descMap?.attrId == "0000" || descMap?.attrId == "F000") {
                     if (isLonsonho()) {
                         value = (value / 10) as int
-                        logDebug "LONSONHO: child.onSwitchLevel value=${value} child=${child}"
+                        logDebug "parse: LONSONHO: child.onSwitchLevel value=${value} child=${child}"
                     }
                     else {
-                        logDebug "Tuya/Girier: child.onSwitchLevel value=${value} child=${child}"
+                        logDebug "parse: Tuya/Girier: child.onSwitchLevel value=${value} child=${child}"
                     }
                     if (child != null) {
                         child.onSwitchLevel((value) as int)
@@ -741,7 +741,7 @@ def parse(String description) {
                         logWarn "child is null for endpoint ${descMap?.endpoint}"
                     }
                     if (isFirst && child != this) {
-                        logDebug "Replicating switchLevel in parent"
+                        logDebug "parse: replicating switchLevel in parent"
                         onSwitchLevel(value)
                     }
                 } else if (descMap?.attrId == "FC02") {
@@ -756,14 +756,14 @@ def parse(String description) {
                     //device.updateSetting('maxLevel', [value: value, type: 'number'])
                 }
                 else {
-                    logDebug "UNPROCESSED switch level cluster 0x0008 command ${descMap?.command} attrId ${descMap?.attrId} value raw: (${value})"
+                    logDebug "parse: UNPROCESSED switch level cluster 0x0008 command ${descMap?.command} attrId ${descMap?.attrId} value raw: (${value})"
                 }
                 break
             case 0x8021: 
-                logDebug "Received bind response, data=${descMap.data} (Sequence Number:${descMap.data[0]}, Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
+                logDebug "parse: received bind response, data=${descMap.data} (Sequence Number:${descMap.data[0]}, Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
                 break
             default :
-                logWarn "UNPROCESSED endpoint=${descMap?.endpoint} cluster=${descMap?.cluster} command=${descMap?.command} attrInt = ${descMap?.attrInt} value= ${descMap?.value} data=${descMap?.data}"
+                logWarn "parse: UNPROCESSED endpoint=${descMap?.endpoint} cluster=${descMap?.cluster} command=${descMap?.command} attrInt = ${descMap?.attrInt} value= ${descMap?.value} data=${descMap?.data}"
                 break
         }
     } 
@@ -789,11 +789,11 @@ def parseTuyaCluster( descMap ) {
         return null
     }
     if (descMap.command == "0B") {
-        logDebug "Tuya command 0x0B data=${descMap.data}"
+        logDebug "parseTuyaCluster: Tuya command 0x0B data=${descMap.data}"
         return null
     }
     if (descMap.command == "24") {
-        logDebug "Tuya Time Sync request data=${descMap.data}"
+        logDebug "parseTuyaCluster: Tuya Time Sync request data=${descMap.data}"
         def offset = 0
         try {
             offset = location.getTimeZone().getOffset(new Date().getTime())
@@ -802,7 +802,7 @@ def parseTuyaCluster( descMap ) {
             logWarn "Cannot resolve current location. please set location in Hubitat location setting. Setting timezone offset to zero"
         }
         def cmds = zigbee.command(0xEF00, 0x24, "0008" +zigbee.convertToHexString((int)(now()/1000),8) +  zigbee.convertToHexString((int)((now()+offset)/1000), 8))
-        logDebug "sending time data : ${cmds}"
+        logDebug "parseTuyaCluster: sending time data : ${cmds}"
         cmds.each{ sendHubCommand(new hubitat.device.HubAction(it, hubitat.device.Protocol.ZIGBEE)) }
         return null
     }
@@ -817,21 +817,21 @@ def parseTuyaCluster( descMap ) {
         case "02" : // Brightness1 (switch level state)
         case "08" : // Brightness2
         case "10" : // Brightness3
-            logDebug "received: Tuya brighntness(level) cmd=${cmd} value=${value}"
+            logDebug "parseTuyaCluster: received: Tuya brighntness(level) cmd=${cmd} value=${value}"
             handleTuyaClusterBrightnessCmd(cmd, value/10 as int)
             break        
         case "03" : // Minimum brightness1
         case "09" : // Minimum brightness2
         case "11" : // Minimum brightness3
             def switchNumber = cmd == "03" ? "01" : cmd == "09" ? "02" : cmd == "11" ? "03" : null
-            logDebug "received: minimum brightness switch#${switchNumber} is ${value/10 as int} (raw=${value})"
+            logDebug "parseTuyaCluster: received: minimum brightness switch#${switchNumber} is ${value/10 as int} (raw=${value})"
             handleTuyaClusterMinBrightnessCmd(cmd, value/10 as int)
             break
         case "05" : // Maximum brightness1
         case "0B" : // Maximum brightness2
         case "13" : // Maximum brightness3
             def switchNumber = cmd == "05" ? "01" : cmd == "0B" ? "02" : cmd == "13" ? "03" : null
-            logDebug "received: maximum brightness switch#${switchNumber} is ${value/10 as int} (raw=${value})"
+            logDebug "parseTuyaCluster: received: maximum brightness switch#${switchNumber} is ${value/10 as int} (raw=${value})"
             handleTuyaClusterMaxBrightnessCmd(cmd, value/10 as int)
             break
         case "06" : // Countdown1
@@ -844,17 +844,17 @@ def parseTuyaCluster( descMap ) {
             if (isFanController()) {
                 handleTuyaClusterBrightnessCmd(cmd, value as int)
             } else {
-                logDebug "received: Tuya type of light source cmd=${cmd} value=${value}"    // (LED, halogen, incandescent)
+                logDebug "parseTuyaCluster: received: Tuya type of light source cmd=${cmd} value=${value}"    // (LED, halogen, incandescent)
             }
             break
         case "0A" : // (10)
-            logDebug "Unknown Tuya dp= ${cmd} fn=${value}"
+            logDebug "parseTuyaCluster: Unknown Tuya dp= ${cmd} fn=${value}"
             break
         case "0E" : // (14)
             logInfo "Power-on Status Setting is ${value}"
             break
         case "12" : // (18)
-            logDebug "Unknown Tuya dp= ${cmd} fn=${value}"
+            logDebug "parseTuyaCluster: Unknown Tuya dp= ${cmd} fn=${value}"
             break
         case "15" : // (21)
             logInfo "Light Mode is ${value}"
@@ -863,10 +863,10 @@ def parseTuyaCluster( descMap ) {
             logInfo "Switch backlight ${value}"
             break
         case "40" : // (64)
-            logDebug "Unknown Tuya dp= ${cmd} fn=${value}"
+            logDebug "parseTuyaCluster: Unknown Tuya dp= ${cmd} fn=${value}"
             break
         default :
-            logWarn "UNHANDLED Tuya cmd=${cmd} value=${value}"
+            logWarn "parseTuyaCluster: UNHANDLED Tuya cmd=${cmd} value=${value}"
             break
     }
 }
@@ -874,13 +874,13 @@ def parseTuyaCluster( descMap ) {
 def parseBasicCluster( descMap ) {
     switch (descMap.attrId) {
         case "0001" :
-            logDebug "Tuya check-in ${descMap.attrId} (${descMap.value})"
+            logDebug "parseBasicCluster: Tuya check-in ${descMap.attrId} (${descMap.value})"
             break
         case "0004" : // attrInt = 4 value= _TZE200_vm1gyrso data=null
-            logDebug "Tuya check-in ${descMap.attrId} (${descMap.value})"
+            logDebug "parseBasicCluster: Tuya check-in ${descMap.attrId} (${descMap.value})"
             break
         default :
-            logWarn "unprocessed Basic cluster endpoint=${descMap?.endpoint} cluster=${descMap?.cluster} command=${descMap?.command} attrInt = ${descMap?.attrInt} value= ${descMap?.value} data=${descMap?.data}"
+            logWarn "parseBasicCluster: unprocessed Basic cluster endpoint=${descMap?.endpoint} cluster=${descMap?.cluster} command=${descMap?.command} attrInt = ${descMap?.attrInt} value= ${descMap?.value} data=${descMap?.data}"
             break
     }
     
@@ -897,7 +897,7 @@ def handleTuyaClusterSwitchCmd(cmd,value) {
         def isFirst = 0 == endpointIdToIndex(switchNumber)
         child.onSwitchState(value)
         if (isFirst && child != this) {
-            logDebug "Replicating switchState in parent"
+            logDebug "handleTuyaClusterSwitchCmd: Replicating switchState in parent"
             onSwitchState(value)
         }
     }
@@ -915,7 +915,7 @@ def handleTuyaClusterBrightnessCmd(cmd, value) {
         def isFirst = 0 == endpointIdToIndex(switchNumber)
         child.onSwitchLevel(value)
         if (isFirst && child != this) {
-            logDebug "Replicating switchLevel in parent"
+            logDebug "handleTuyaClusterBrightnessCmd: Replicating switchLevel in parent"
             onSwitchLevel(value)
         }
     }
@@ -929,12 +929,12 @@ def handleTuyaClusterMinBrightnessCmd(cmd, value) {
     }
     else {
         def child = getChildByEndpointId(switchNumber)
-        logDebug "cmd=${cmd} switchNumber=${switchNumber} child = ${child}"
+        logDebug "handleTuyaClusterMinBrightnessCmd: cmd=${cmd} switchNumber=${switchNumber} child = ${child}"
         def isFirst = 0 == endpointIdToIndex(switchNumber)
         child.updateSetting("minLevel", [value: value , type:"number"])
         logInfo "minLevel brightness parameter for switch #${switchNumber} was updated to ${value}%"
         if (isFirst && child != this) {
-            logDebug "Replicating minBrightness in parent"
+            logDebug "handleTuyaClusterMinBrightnessCmd: Replicating minBrightness in parent"
             device.updateSetting("minLevel", [value: value , type:"number"])
         }
     }
@@ -948,12 +948,12 @@ def handleTuyaClusterMaxBrightnessCmd(cmd, value) {
     }
     else {
         def child = getChildByEndpointId(switchNumber)
-        logDebug "child = ${child}"
+        logDebug "handleTuyaClusterMaxBrightnessCmd: child = ${child}"
         def isFirst = 0 == endpointIdToIndex(switchNumber)
         child.updateSetting("maxLevel", [value: value , type:"number"])
         logInfo "maxLevel brightness parameter for switch #${switchNumber} was updated to ${value}%"
         if (isFirst && child != this) {
-            logDebug "Replicating maxBrightness in parent"
+            logDebug "handleTuyaClusterMaxBrightnessCmd: Replicating maxBrightness in parent"
             device.updateSetting("maxLevel", [value: value , type:"number"])
         }
     }
@@ -974,7 +974,7 @@ private int getAttributeValue(ArrayList _data) {
         }
     }
     catch ( e ) {
-        log.error "Exception caught while parsing Tuya data : ${_data}"
+        logWarn "Exception caught while parsing Tuya data : ${_data}"
     }
     return retValue
 }
@@ -1126,9 +1126,9 @@ def levelToValue(Integer level) {
     Integer minLevel100 = Math.round((settings.minLevel ?: DEFAULT_MIN_LEVEL) * mult)
     Integer maxLevel100 = Math.round((settings.maxLevel ?: DEFAULT_MAX_LEVEL) * mult)
     
-    log.trace "mult=${mult}, minLevel100=${minLevel100}, maxLevel100=${maxLevel100}"
+    //log.trace "mult=${mult}, minLevel100=${minLevel100}, maxLevel100=${maxLevel100}"
     def reScaled =  rescale(level, 0, 100, minLevel, maxLevel100)
-    logDebug "level=${level} reScaled=${reScaled}"
+    logDebug "levelToValue: level=${level} reScaled=${reScaled}"
     return reScaled
 }
 
@@ -1150,13 +1150,13 @@ def valueToLevel(Integer value) {
     }
     Integer minValue255 = Math.round((settings.minLevel ?: DEFAULT_MIN_LEVEL) * mult)
     Integer maxValue255 = Math.round((settings.maxLevel ?: DEFAULT_MAX_LEVEL) * mult)
-    log.trace "mult=${mult}, minValue255=${minValue255}, maxValue255=${maxValue255}"
+    //log.trace "mult=${mult}, minValue255=${minValue255}, maxValue255=${maxValue255}"
     
     if (value < minValue255) value = minValue255
     if (value > maxValue255) value = maxValue255
     
     def reScaled = rescale(value, minValue255, maxValue255, 0, 100)
-    logDebug "raw value:${value} reScaled=${reScaled}"
+    logDebug "valueToLevel: raw value:${value} reScaled=${reScaled}"
     return reScaled
 }
 
