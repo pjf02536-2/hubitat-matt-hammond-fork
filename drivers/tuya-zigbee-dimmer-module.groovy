@@ -55,7 +55,10 @@ ver 0.3.0  2023/03/12 kkossev      - bugfix: TS110E/F configiration for the auto
 ver 0.4.0  2023/03/25 kkossev      - added TS110E _TZ3210_pagajpog; added advancedOptions; added forcedProfile; added deviceProfilesV2; added initialize() command; sendZigbeeCommands() in all Command handlers; configure() and updated() do not re-initialize the device!; setDeviceNameAndProfile(); destEP here and there
 ver 0.4.1  2023/03/31 kkossev      - added new TS110E_GIRIER_DIMMER product profile (Girier _TZ3210_k1msuvg6 support @jshimota); installed() initialization and configuration sequence changed'; fixed GIRIER Toggle command not working; added _TZ3210_4ubylghk
 ver 0.4.2  2023/04/10 kkossev      - (dev. branch) added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device; all Current States are cleared on Initialize; Lonsonho brightness control; Hubitat 'F2 bug' patched; Lonsonho change level uses cluster 0x0008
+ver 0.4.3  2023/04/10 kkossev      - (dev. branch) numEps bug fix; generic ZCL dimmer support; 
 *
+*                                   TODO: bugfix when endpointId: 0B
+*                                   TODO: remove obsolete deviceSumulation options;
 *                                   TODO: add 'Health Check' capability and scheduled jobs
 *                                   TODO: TS110E_GIRIER_DIMMER TS011E power_on_behavior_1, TS110E_switch_type ['toggle', 'state', 'momentary']) (TS110E_options - needsMagic())
 *                                   TODO: Tuya Fan Switch support
@@ -63,8 +66,8 @@ ver 0.4.2  2023/04/10 kkossev      - (dev. branch) added TS110E_LONSONHO_DIMMER;
 *
 */
 
-def version() { "0.4.2" }
-def timeStamp() {"2023/04/09 2:41 PM"}
+def version() { "0.4.3" }
+def timeStamp() {"2023/04/09 11:57 PM"}
 
 import groovy.transform.Field
 
@@ -104,10 +107,10 @@ import groovy.transform.Field
     "_TZ3210_4ubylghk": [ numEps: 2, model: "TS110E", inClusters: "0005,0004,0006,0008,E001,0000", joinName: "Lonsonho Tuya Smart Zigbee Dimmer"]                  // https://community.hubitat.com/t/driver-support-for-tuya-dimmer-module-model-ts110e-manufacturer-tz3210-4ubylghk/116077?u=kkossev
 
 ]
-    
-def config() {
-    return modelConfigs[device.getDataValue("manufacturer")]
-}
+
+def getNumEps() {return config()?.numEps ?: 1}
+def isParent()  {return (getParent() == null /*|| getNumEps() == 1*/) }
+def config() { return modelConfigs[device.getDataValue("manufacturer")] }
 
 @Field static final Map deviceProfilesV2 = [
     "TS110F_DIMMER"  : [
@@ -256,6 +259,7 @@ metadata {
                 [name:"dpType",    type: "ENUM",   constraints: ["DP_TYPE_VALUE", "DP_TYPE_BOOL", "DP_TYPE_ENUM"], description: "DP data type"] 
             ]
             command "test", [[name: "test", type: "STRING", description: "test", constraints: ["STRING"]]]
+            command "testX"
         }
         
         modelConfigs.each{ data ->
@@ -297,6 +301,7 @@ metadata {
     }
 }
 
+@Field static final String UNKNOWN =  'UNKNOWN'
 @Field static final int DEFAULT_MIN_LEVEL = 0
 @Field static final int DEFAULT_MAX_LEVEL = 100
 @Field static final int TS110E_LONSONHO_LEVEL_ATTR = 0xF000        // (61440) 
@@ -319,7 +324,6 @@ metadata {
 
 
 
-
 /*
 -----------------------------------------------------------------------------
 Setting up child devices
@@ -327,7 +331,7 @@ Setting up child devices
 */
 
 def createChildDevices() {
-    def numEps = config().numEps
+    def numEps = getNumEps()
     
     if (numEps == 1) {
         numEps = 0
@@ -475,7 +479,7 @@ def off() {
 
 // sends Zigbee commands to toggle the switch
 def toggle() {
-    logDebug("toggle: ...")
+    logDebug("toggle: ... getParent()=${getParent()}")
     if (isParent()) {
         sendZigbeeCommands(cmdSwitchToggle(indexToChildDni(0)))
     } else {
@@ -517,12 +521,22 @@ def cmdRefresh(String childDni) {
         return null
     }
     */
-    return [
-        "he rattr 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 0 {}",
-        "delay 100",
-        "he rattr 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 0 {}",
-        "delay 100"
-    ]
+    if (isLonsonho()) {
+        return [
+            "he rattr 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 0 {}",
+            "delay 100",
+            "he rattr 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 0xF000 {}",
+            "delay 100"
+        ]
+    }
+    else {
+        return [
+            "he rattr 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 0 {}",
+            "delay 100",
+            "he rattr 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 0 {}",
+            "delay 100"
+        ]
+    }
 }
 
 // returns Zigbee commands to togle the switch
@@ -548,7 +562,7 @@ def cmdSwitchToggle(String childDni) {
 def cmdSwitch(String childDni, onOff) {
     ArrayList<String> cmds = []
     def endpointId = childDniToEndpointId(childDni)
-    logDebug "cmdSwitch: childDni=${childDni} endpointId=${endpointId} onOff=${onOff}"
+    logDebug "cmdSwitch: childDni=${childDni} onOff=${onOff} endpointId=${endpointId}"
     onOff = onOff ? "1" : "0"
     
     if (isTS0601()) {
@@ -590,7 +604,7 @@ def cmdSetLevel(String childDni, value, duration) {
         }
         logDebug "cmdSetLevel: TS0601: sending cmdSetLevel command=${dpCommand} value=${value} ($dpValHex)"
         cmdsTuya = sendTuyaCommand(dpCommand, DP_TYPE_VALUE, dpValHex)
-        if (child.isAutoOn() && device.currentState('switch', true).value != 'on') {
+        if (child?.isAutoOn() && (device.currentState('switch', true)?.value ?: "") != 'on') {
             logDebug "cmdSetLevel: AutoOn: sending cmdSwitch on for switch #${endpointId}"
             cmdsTuya += cmdSwitch(childDni, 1)
         }
@@ -613,7 +627,7 @@ def cmdSetLevel(String childDni, value, duration) {
         logDebug "GIRIER/others: cmdSetLevel: sending value ${value} cmdTS011=${cmdTS011}"
     }
     
-    if (child.isAutoOn()) {
+    if (child?.isAutoOn()) {
         cmdTS011 += "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 1 {}"
     }
     logDebug "cmdSetLevel: sending cmdTS011=${cmdTS011}"
@@ -707,7 +721,7 @@ def parse(String description) {
                     logDebug "parse: received ZCL Command Response for cluster ${descMap.clusterId} command ${clusterCmd}, data=${descMap.data} (Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
                     break
                 }
-                child.onSwitchState(value)
+                child?.onSwitchState(value)
                 if (isFirst && child != this) {
                     logDebug "parse: replicating switchState in parent"
                     onSwitchState(value)
@@ -733,13 +747,10 @@ def parse(String description) {
                         logDebug "parse: LONSONHO: child.onSwitchLevel value=${value} child=${child}"
                     }
                     else {
-                        logDebug "parse: Tuya/Girier: child.onSwitchLevel value=${value} child=${child}"
+                        logDebug "parse: Tuya/Girier/OEM: child.onSwitchLevel value=${value} child=${child}"
                     }
                     if (child != null) {
-                        child.onSwitchLevel((value) as int)
-                    }
-                    else {
-                        logWarn "child is null for endpoint ${descMap?.endpoint}"
+                        child?.onSwitchLevel((value) as int)
                     }
                     if (isFirst && child != this) {
                         logDebug "parse: replicating switchLevel in parent"
@@ -780,9 +791,11 @@ Tuya cluster EF00 specific code
 */
 
 def tuyaBlackMagic() {
+    /*
     def ep = safeToInt(state.destinationEP ?: 01)
     if (ep==null || ep==0) ep = 1
-    return zigbee.readAttribute(0x0000, [0x0004, 0x000, 0x0001, 0x0005, 0x0007, 0xfffe], [destEndpoint :ep], delay=200)
+    */
+    return zigbee.readAttribute(0x0000, [0x0004, 0x000, 0x0001, 0x0005, 0x0007, 0xfffe], [:]/*[destEndpoint :ep]*/, delay=200)
 }
 
 def parseTuyaCluster( descMap ) {
@@ -890,13 +903,13 @@ def parseBasicCluster( descMap ) {
 def handleTuyaClusterSwitchCmd(cmd,value) {
     def switchNumber = cmd == "01" ? "01" : cmd == "07" ? "02" : cmd == "0F" ? "03" : null
     logInfo "Switch ${switchNumber} is ${value==0 ? "off" : "on"}"
-    if (config().numEps == 1) {
+    if (getNumEps() == 1) {
         onSwitchState(value)
     }
     else {
         def child = getChildByEndpointId(switchNumber)
         def isFirst = 0 == endpointIdToIndex(switchNumber)
-        child.onSwitchState(value)
+        child?.onSwitchState(value)
         if (isFirst && child != this) {
             logDebug "handleTuyaClusterSwitchCmd: Replicating switchState in parent"
             onSwitchState(value)
@@ -908,13 +921,13 @@ def handleTuyaClusterBrightnessCmd(cmd, value) {
     def switchNumber = cmd == "02" ? "01" : cmd == "08" ? "02" : cmd == "10" ? "03" : "01"
     scaledValue = valueToLevel(value)
     logInfo "Brightness ${switchNumber} is ${scaledValue}% (${value})"
-    if (config().numEps == 1)  {
+    if (getNumEps() == 1)  {
         onSwitchLevel(value)
     }
     else {
         def child = getChildByEndpointId(switchNumber)
         def isFirst = 0 == endpointIdToIndex(switchNumber)
-        child.onSwitchLevel(value)
+        child?.onSwitchLevel(value)
         if (isFirst && child != this) {
             logDebug "handleTuyaClusterBrightnessCmd: Replicating switchLevel in parent"
             onSwitchLevel(value)
@@ -924,7 +937,7 @@ def handleTuyaClusterBrightnessCmd(cmd, value) {
 
 def handleTuyaClusterMinBrightnessCmd(cmd, value) {
     def switchNumber = cmd == "03" ? "01" : cmd == "09" ? "02" : cmd == "11" ? "03" : null
-    if (config().numEps == 1) {
+    if (getNumEps() == 1) {
         device.updateSetting("minLevel", [value: value , type:"number"])
         logInfo "minLevel brightness parameter was updated to ${value}%"
     }
@@ -932,7 +945,7 @@ def handleTuyaClusterMinBrightnessCmd(cmd, value) {
         def child = getChildByEndpointId(switchNumber)
         logDebug "handleTuyaClusterMinBrightnessCmd: cmd=${cmd} switchNumber=${switchNumber} child = ${child}"
         def isFirst = 0 == endpointIdToIndex(switchNumber)
-        child.updateSetting("minLevel", [value: value , type:"number"])
+        child?.updateSetting("minLevel", [value: value , type:"number"])
         logInfo "minLevel brightness parameter for switch #${switchNumber} was updated to ${value}%"
         if (isFirst && child != this) {
             logDebug "handleTuyaClusterMinBrightnessCmd: Replicating minBrightness in parent"
@@ -943,7 +956,7 @@ def handleTuyaClusterMinBrightnessCmd(cmd, value) {
 
 def handleTuyaClusterMaxBrightnessCmd(cmd, value) {
     def switchNumber = cmd == "05" ? "01" : cmd == "0B" ? "02" : cmd == "13" ? "03" : null
-    if (config().numEps == 1) {
+    if (getNumEps() == 1) {
         device.updateSetting("maxLevel", [value: value , type:"number"])
         logInfo "maxLevel brightness parameter was updated to ${value}%"
     }
@@ -951,7 +964,7 @@ def handleTuyaClusterMaxBrightnessCmd(cmd, value) {
         def child = getChildByEndpointId(switchNumber)
         logDebug "handleTuyaClusterMaxBrightnessCmd: child = ${child}"
         def isFirst = 0 == endpointIdToIndex(switchNumber)
-        child.updateSetting("maxLevel", [value: value , type:"number"])
+        child?.updateSetting("maxLevel", [value: value , type:"number"])
         logInfo "maxLevel brightness parameter for switch #${switchNumber} was updated to ${value}%"
         if (isFirst && child != this) {
             logDebug "handleTuyaClusterMaxBrightnessCmd: Replicating maxBrightness in parent"
@@ -1049,11 +1062,14 @@ def endpointIdToChildDni(endpointId) {
 }
 
 def indexToChildDni(i) {
+    //log.trace "indexToChildDni(${i}): ${endpointIdToChildDni(indexToEndpointId(i))}"
     return endpointIdToChildDni(indexToEndpointId(i))
 }
 
 def childDniToEndpointId(childDni) {
     def match = childDni =~ childDniPattern
+    //log.trace "childDniToEndpointId: childDni=${childDni} childDniPattern=${childDniPattern}" 
+    //log.trace " match=${match}"
     if (match) {
         if (match[0][1] == device.deviceNetworkId) {
             return match[0][2]
@@ -1073,6 +1089,7 @@ def childDnisToEndpointIds(List<String> childDnis) {
 
 def getChildByEndpointId(endpointId) {
     //log.trace "getChildByEndpointId endpointId=${endpointId}"
+    if (endpointId == null) return this
     if (endpointIdToIndex(endpointId) == 0 && getChildDevices().size() == 0) {
         //log.trace "getChildByEndpointId returning this: ${this}"
         return this
@@ -1085,7 +1102,7 @@ def getChildByEndpointId(endpointId) {
 def getChildEndpointIds() {
     if (getChildDevices().size() == 0) {
         //logDebug "getChildEndpointIds() : no childs"
-        return [device.endpointId]
+        return [getDestinationEP()/*device.endpointId*/]
     } else {
         //logDebug "getChildEndpointIds() : size = ${getChildDevices().size()}"
         return getChildDevices().collect{childDniToEndpointId(it.getDni())}
@@ -1168,7 +1185,7 @@ Standard handlers
 */
 
 def getDeviceInfo() {
-    return "model=${device.getDataValue('model')} manufacturer=${device.getDataValue('manufacturer')} destinationEP=${state.destinationEP} <b>deviceProfile=${state.deviceProfile}</b>"
+    return "model=${device.getDataValue('model')} manufacturer=${device.getDataValue('manufacturer')} destinationEP=${state.destinationEP ?: UNKNOWN} <b>deviceProfile=${state.deviceProfile ?: UNKNOWN}</b>"
 }
 
 //  will be the first function called just once when paired as a new device. Not called again on consequent re-pairings !
@@ -1212,6 +1229,10 @@ def setDestinationEP() {
     }      
 }
 
+def getDestinationEP() {
+    return state.destinationEP ?: device.endpointId ?: "01"
+}
+
 void initializeVars( boolean fullInit = false ) {
     logInfo "InitializeVars( fullInit = ${fullInit} )..."
     if (fullInit == true) {
@@ -1252,14 +1273,21 @@ def updated() {
     if (isTS0601()) {
         ArrayList<String> cmdsTuya = []
         def cmd = "01"
-        def eps = parent?.config()?.numEps
+        def eps = getNumEps()
         logDebug "config().numEps = ${eps}"
         if (eps > 1) {
-            cmd = this.device.getData().componentName[-2..-1]
-            logInfo "### updating settings for child device ${this.device.getData().componentName} ... device #${cmd}"
+            if (isParent()) {
+                cmd = "01"
+                logInfo "### updating the settings for the ${eps} gangs device -  ${device.getDataValue("manufacturer")} - <b>FIRST CHANNEL ONLY</b>"
+            }
+            else {
+                log.warn "this.device.getData() = ${this.device.getData()}"
+                cmd = this.device.getData().componentName[-2..-1]
+                logInfo "### updating settings for child device ${this.device.getData().componentName} ... device #${cmd}"
+            }
         }
         else {    // single EP device
-            logInfo "### updating settings for device ${device.getDataValue("manufacturer")} ${config()}"
+            logInfo "### updating settings for device ${device.getDataValue("manufacturer")}"
         }
         // minLevel
         Integer value = Math.round(this.minLevel * 10)
@@ -1335,10 +1363,6 @@ def initialized() {
 Shared helper functions
 -----------------------------------------------------------------------------
 */
-
-def isParent() {
-    return getParent() == null
-}
 
 def rescale(value, fromLo, fromHi, toLo, toHi) {
     return Math.round((((value-fromLo)*(toHi-toLo))/(fromHi-fromLo)+toLo))
@@ -1484,7 +1508,7 @@ def getDeviceNameAndProfile( model=null, manufacturer=null) {
         }
     }
     if (deviceProfile == UNKNOWN) {
-        logWarn "<b>NOT FOUND!</b> deviceName =${deviceName} profileName=${deviceProfile} for model ${deviceModel} manufacturer ${deviceManufacturer}"
+        logWarn "model ${deviceModel} manufacturer ${deviceManufacturer} <b>NOT FOUND!</b> deviceName=${deviceName} profileName=${deviceProfile}"
     }
     return [deviceName, deviceProfile]
 }
