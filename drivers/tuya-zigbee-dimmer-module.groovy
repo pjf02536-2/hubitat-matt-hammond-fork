@@ -55,7 +55,7 @@ ver 0.3.0  2023/03/12 kkossev      - bugfix: TS110E/F configiration for the auto
 ver 0.4.0  2023/03/25 kkossev      - added TS110E _TZ3210_pagajpog; added advancedOptions; added forcedProfile; added deviceProfilesV2; added initialize() command; sendZigbeeCommands() in all Command handlers; configure() and updated() do not re-initialize the device!; setDeviceNameAndProfile(); destEP here and there
 ver 0.4.1  2023/03/31 kkossev      - added new TS110E_GIRIER_DIMMER product profile (Girier _TZ3210_k1msuvg6 support @jshimota); installed() initialization and configuration sequence changed'; fixed GIRIER Toggle command not working; added _TZ3210_4ubylghk
 ver 0.4.2  2023/04/10 kkossev      - (dev. branch) added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device; all Current States are cleared on Initialize; Lonsonho brightness control; Hubitat 'F2 bug' patched; Lonsonho change level uses cluster 0x0008
-ver 0.4.3  2023/04/11 kkossev      - (dev. branch) numEps bug fix; generic ZCL dimmer support; patch for Girier firmware bug on Refresh command 01 reporting off state; added testRefresh
+ver 0.4.3  2023/04/11 kkossev      - (dev. branch) numEps bug fix; generic ZCL dimmer support; patch for Girier firmware bug on Refresh command 01 reporting off state; added testRefresh; DeviceWrapper fixes;
 *
 *                                   TODO: bugfix when endpointId: 0B
 *                                   TODO: remove obsolete deviceSumulation options;
@@ -67,7 +67,7 @@ ver 0.4.3  2023/04/11 kkossev      - (dev. branch) numEps bug fix; generic ZCL d
 */
 
 def version() { "0.4.3" }
-def timeStamp() {"2023/04/11 6:10 PM"}
+def timeStamp() {"2023/04/11 8:48 PM"}
 
 import groovy.transform.Field
 
@@ -109,7 +109,7 @@ import groovy.transform.Field
 ]
 
 def getNumEps() {return config()?.numEps ?: 1}
-def isParent()  {return (getParent() == null /*|| getNumEps() == 1*/) }
+def isParent()  {return getParent() == null }
 def config() { return modelConfigs[device.getDataValue("manufacturer")] }
 
 @Field static final Map deviceProfilesV2 = [
@@ -224,14 +224,15 @@ def config() { return modelConfigs[device.getDataValue("manufacturer")] }
             preferences   : []
     ]    
 ]
-
-def getModelGroup()        { return state.deviceProfile ?: "UNKNOWN" }
+def getDW()                { return isParent() ? this : getParent() }
+//def getModelGroup()        { return isParent() ? (state.deviceProfile ?:"UNKNOWN") : getParent().state.deviceProfile ?: "UNKNOWN" }
+def getModelGroup()        { return getDW().state.deviceProfile ?:"UNKNOWN" }
 def getDeviceProfilesMap() {deviceProfilesV2.values().description as List<String>}
-def isTS0601()             { return getModelGroup().contains("TS0601") }
-def isFanController()      { return getModelGroup().contains("TS0601_FAN") }
-def isTS110E()             { return getModelGroup().contains("TS110E_DIMMER") }
-def isGirier()             { return getModelGroup().contains("TS110E_GIRIER_DIMMER") }
-def isLonsonho()           { return getModelGroup().contains("TS110E_LONSONHO_DIMMER") }
+def isTS0601()             { return getDW().getModelGroup().contains("TS0601") }
+def isFanController()      { return getDW().getModelGroup().contains("TS0601_FAN") }
+def isTS110E()             { return getDW().getModelGroup().contains("TS110E_DIMMER") }
+def isGirier()             { return getDW().getModelGroup().contains("TS110E_GIRIER_DIMMER") }
+def isLonsonho()           { return getDW().getModelGroup().contains("TS110E_LONSONHO_DIMMER") }
 
 metadata {
     definition (
@@ -1084,7 +1085,13 @@ def endpointIdToChildDni(endpointId) {
 
 def indexToChildDni(i) {
     //log.trace "indexToChildDni(${i}): ${endpointIdToChildDni(indexToEndpointId(i))}"
-    return endpointIdToChildDni(indexToEndpointId(i))
+    if (i==0) {
+        //log.trace "indexToChildDni(${i}): ${getDestinationEP()}"
+        return getDestinationEP()    // 04/11/2023
+    }
+    else {
+        return endpointIdToChildDni(indexToEndpointId(i))
+    }
 }
 
 def childDniToEndpointId(childDni) {
@@ -1096,7 +1103,7 @@ def childDniToEndpointId(childDni) {
             return match[0][2]
         }
     }
-    return null
+    return getDestinationEP()  //null
 }
 
 def childDnisToEndpointIds(List<String> childDnis) {
@@ -1195,7 +1202,7 @@ def valueToLevel(Integer value) {
     if (value > maxValue255) value = maxValue255
     
     def reScaled = rescale(value, minValue255, maxValue255, 0, 100)
-    logDebug "valueToLevel: raw value:${value} reScaled=${reScaled}"
+    logDebug "valueToLevel: raw value:${value} reScaled=${reScaled} (isParent=${isParent()}, isTS0601=${isTS0601()})"
     return reScaled
 }
 
@@ -1407,19 +1414,19 @@ Logging output
 
 def logDebug(msg) {
     if (settings.debugEnable) {
-        log.debug msg
+        log.debug "${device.displayName} " + msg
     }
 }
 
 def logInfo(msg) {
     if (settings.infoEnable) {
-        log.info msg
+        log.info "${device.displayName} " + msg
     }
 }
 
 def logWarn(msg) {
     if (settings.debugEnable) {
-        log.warn msg
+        log.warn "${device.displayName} " + msg
     }
 }
 
