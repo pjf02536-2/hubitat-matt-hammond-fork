@@ -67,7 +67,7 @@ ver 0.4.3  2023/04/11 kkossev      - (dev. branch) numEps bug fix; generic ZCL d
 */
 
 def version() { "0.4.3" }
-def timeStamp() {"2023/04/11 10:51 PM"}
+def timeStamp() {"2023/04/11 11:57 PM"}
 
 import groovy.transform.Field
 
@@ -214,7 +214,12 @@ def config() { return modelConfigs[device.getDataValue("manufacturer")] }
             description   : "TS0505B Tuya Bulb",
             models        : ["TS0601"],
             fingerprints  : [
-                [numEps: 1, profileId:"0104", endpointId:"01", inClusters:" 0003,0004,0005,0006,1000,0008,0300,EF00,0000", outClusters:"0019,000A", model:"TS0505B", manufacturer:"_TZ3210_wxa85bwk", deviceJoinName: "Tuya Bulb"]                          // https://www.aliexpress.us/item/3256804518783061.html https://github.com/Koenkk/zigbee2mqtt/issues/12793
+                [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0003,0004,0005,0006,1000,0008,0300,EF00,0000", outClusters:"0019,000A", model:"TS0505B", manufacturer:"_TZ3210_wxa85bwk", deviceJoinName: "Tuya Bulb"],       // KK
+                [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0003,0004,0005,0006,1000,0008,0300,EF00,0000", outClusters:"0019,000A", model:"TS0505B", manufacturer:"_TZ3210_r5afgmkl", deviceJoinName: "Tuya Bulb"],       // https://community.hubitat.com/t/tuya-zigbee-bulb/115563?u=kkossev
+                [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0003,0004,0005,0006,1000,0008,0300,EF00,0000", outClusters:"0019,000A", model:"TS0505B", manufacturer:"_TZ3210_eejm8dcr", deviceJoinName: "Tuya LED Strip"],  // https://community.hubitat.com/t/c8-gledopto-light-strip-controllers/114775/9?u=kkossev
+                [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0003,0004,0005,0006,1000,0008,0300,EF00,0000", outClusters:"0019,000A", model:"TS0505B", manufacturer:"_TZ3000_qqjaziws", deviceJoinName: "Tuya LED Strip"],  // https://community.hubitat.com/t/anyone-used-this-tuya-led-strip-controller-with-success/55593/21?u=kkossev
+                [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0000,0003,0004,0005,0006,1000,0008,0300,EF00", outClusters:"0019,000A", model:"TS0505B", manufacturer:"_TZ3210_zexrfbzd", deviceJoinName: "Tuya Bulb"],       // https://community.hubitat.com/t/zigbee-bulb-paired-as-device/107530/3?u=kkossev
+                [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0000,0003,0004,0005,0006,1000,0008,0300,EF00", outClusters:"0019,000A", model:"TS0505B", manufacturer:"_TZ3000_cmaky9gq", deviceJoinName: "Ikuu LED Strip"]   // https://community.hubitat.com/t/mercator-ikuu/70404/191?u=kkossev
             ],
             deviceJoinName: "Tuya Bulb",
             capabilities  : ["SwitchLevel": true],
@@ -245,6 +250,7 @@ def isFanController()      { return getDW().getModelGroup().contains("TS0601_FAN
 def isTS110E()             { return getDW().getModelGroup().contains("TS110E_DIMMER") }
 def isGirier()             { return getDW().getModelGroup().contains("TS110E_GIRIER_DIMMER") }
 def isLonsonho()           { return getDW().getModelGroup().contains("TS110E_LONSONHO_DIMMER") }
+def isTuyaBulb()           { return getDW().getModelGroup().contains("TS0505B_TUYA_BULB") }
 
 metadata {
     definition (
@@ -541,7 +547,7 @@ def cmdRefresh(String childDni) {
         return null
     }
     */
-    if (isLonsonho()) {
+    if (isLonsonho() || isTuyaBulb()) {
         return [
             "he rattr 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 0 {}",
             "delay 100",
@@ -603,7 +609,7 @@ def cmdSwitch(String childDni, onOff) {
 def cmdSetLevel(String childDni, value, duration) {
     def endpointId = childDniToEndpointId(childDni)
     value = value.toInteger()
-    value = value > 255 ? 255 : value
+    //value = value > 255 ? 255 : value
     value = value < 1 ? 0 : value
 
     duration = (duration * 10).toInteger()
@@ -636,7 +642,13 @@ def cmdSetLevel(String childDni, value, duration) {
         value = value * 10
         cmdTS011 = [
             "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 4  { 0x${intTo16bitUnsignedHex(value)} 0x${intTo16bitUnsignedHex(duration)} }",
-            "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0xF000 4  { 0x${intTo16bitUnsignedHex(value)} 0x${intTo16bitUnsignedHex(duration)} }",
+        ]
+        logDebug "LONSONHO: cmdSetLevel: sending value ${value} cmdTS011=${cmdTS011}"
+    }
+    else if ( isTuyaBulb()) {
+        cmdTS011 = [
+            "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 4  { 0x${intTo8bitUnsignedHex(value)} 0x${intTo16bitUnsignedHex(duration)} }",
+            //"he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 0xF0 { 0x${intTo16bitUnsignedHex(value)} 0x${intTo16bitUnsignedHex(duration)} }",
         ]
         logDebug "LONSONHO: cmdSetLevel: sending value ${value} cmdTS011=${cmdTS011}"
     }
@@ -776,12 +788,18 @@ def parse(String description) {
                 }
                 logDebug "parse: switch level cluster 0x0008 endpoint ${descMap?.endpoint} command ${descMap?.command} attrId ${descMap?.attrId} value raw ${value})"
                 if (descMap?.attrId == "0000" || descMap?.attrId == "F000") {
-                    if (isLonsonho()) {
+                    if (isTuyaBulb() && descMap?.attrId == "0000") {
+                        logDebug "parse: Tuya Bulb: child.onSwitchLevel value=${value} child=${child}"
+                    }                    
+                    else if (isLonsonho() && descMap?.attrId == "F000") {
                         value = (value / 10) as int
-                        logDebug "parse: LONSONHO: child.onSwitchLevel value=${value} child=${child}"
+                    }
+                    else if (descMap?.attrId == "0000") {
+                        logDebug "parse: Tuya/Girier/OEM: child.onSwitchLevel value=${value} child=${child}"
                     }
                     else {
-                        logDebug "parse: Tuya/Girier/OEM: child.onSwitchLevel value=${value} child=${child}"
+                        logDebug "parse: SKIPPING  attrId ${descMap?.attrId} value raw ${value} !"        // TODO !!
+                        break
                     }
                     if (child != null) {
                         child?.onSwitchLevel((value) as int)
@@ -790,6 +808,8 @@ def parse(String description) {
                         logDebug "parse: replicating switchLevel in parent"
                         onSwitchLevel(value)
                     }
+                } else if (descMap?.attrId == "000F") {
+                    logInfo "Tuya options are (0x${descMap.value})"
                 } else if (descMap?.attrId == "FC02") {
                     //value = hexStrToUnsignedInt(descMap.value)
                     logInfo "light type is '${TS110ELightTypeOptions.options[value]}' (0x${descMap.value})"
@@ -1178,7 +1198,7 @@ def levelToValue(Integer level) {
     else if (isLonsonho()) {
         mult = 1.0
     }
-    else {
+    else {    // including isTuyaBulb()
         mult =  2.55
     }
     Integer minLevel100 = Math.round((settings.minLevel ?: DEFAULT_MIN_LEVEL) * mult)
@@ -1203,7 +1223,7 @@ def valueToLevel(Integer value) {
     else if (isLonsonho()) {
         mult = 1.0
     }
-    else {
+    else {    // including isTuyaBulb()
         mult =  2.55
     }
     Integer minValue255 = Math.round((settings.minLevel ?: DEFAULT_MIN_LEVEL) * mult)
