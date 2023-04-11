@@ -55,7 +55,7 @@ ver 0.3.0  2023/03/12 kkossev      - bugfix: TS110E/F configiration for the auto
 ver 0.4.0  2023/03/25 kkossev      - added TS110E _TZ3210_pagajpog; added advancedOptions; added forcedProfile; added deviceProfilesV2; added initialize() command; sendZigbeeCommands() in all Command handlers; configure() and updated() do not re-initialize the device!; setDeviceNameAndProfile(); destEP here and there
 ver 0.4.1  2023/03/31 kkossev      - added new TS110E_GIRIER_DIMMER product profile (Girier _TZ3210_k1msuvg6 support @jshimota); installed() initialization and configuration sequence changed'; fixed GIRIER Toggle command not working; added _TZ3210_4ubylghk
 ver 0.4.2  2023/04/10 kkossev      - (dev. branch) added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device; all Current States are cleared on Initialize; Lonsonho brightness control; Hubitat 'F2 bug' patched; Lonsonho change level uses cluster 0x0008
-ver 0.4.3  2023/04/11 kkossev      - (dev. branch) numEps bug fix; generic ZCL dimmer support; patch for Girier firmware bug on Refresh command 01 reporting off state; added testRefresh; DeviceWrapper fixes;
+ver 0.4.3  2023/04/11 kkossev      - (dev. branch) numEps bug fix; generic ZCL dimmer support; patch for Girier firmware bug on Refresh command 01 reporting off state; added testRefresh; DeviceWrapper fixes; added TS0505B_TUYA_BULB
 *
 *                                   TODO: bugfix when endpointId: 0B
 *                                   TODO: remove obsolete deviceSumulation options;
@@ -67,7 +67,7 @@ ver 0.4.3  2023/04/11 kkossev      - (dev. branch) numEps bug fix; generic ZCL d
 */
 
 def version() { "0.4.3" }
-def timeStamp() {"2023/04/11 8:48 PM"}
+def timeStamp() {"2023/04/11 10:51 PM"}
 
 import groovy.transform.Field
 
@@ -210,6 +210,19 @@ def config() { return modelConfigs[device.getDataValue("manufacturer")] }
             preferences   : []
     ],
     
+    "TS0505B_TUYA_BULB"  : [
+            description   : "TS0505B Tuya Bulb",
+            models        : ["TS0601"],
+            fingerprints  : [
+                [numEps: 1, profileId:"0104", endpointId:"01", inClusters:" 0003,0004,0005,0006,1000,0008,0300,EF00,0000", outClusters:"0019,000A", model:"TS0505B", manufacturer:"_TZ3210_wxa85bwk", deviceJoinName: "Tuya Bulb"]                          // https://www.aliexpress.us/item/3256804518783061.html https://github.com/Koenkk/zigbee2mqtt/issues/12793
+            ],
+            deviceJoinName: "Tuya Bulb",
+            capabilities  : ["SwitchLevel": true],
+            attributes    : ["healthStatus": "unknown", "powerSource": "mains"],
+            configuration : [],
+            preferences   : []
+    ],
+    
     "OTHER_OEM_DIMMER"  : [
             description   : "Other OEM Dimmer",
             models        : ["gq8b1uv", "GL-SD-001"],
@@ -225,7 +238,6 @@ def config() { return modelConfigs[device.getDataValue("manufacturer")] }
     ]    
 ]
 def getDW()                { return isParent() ? this : getParent() }
-//def getModelGroup()        { return isParent() ? (state.deviceProfile ?:"UNKNOWN") : getParent().state.deviceProfile ?: "UNKNOWN" }
 def getModelGroup()        { return getDW().state.deviceProfile ?:"UNKNOWN" }
 def getDeviceProfilesMap() {deviceProfilesV2.values().description as List<String>}
 def isTS0601()             { return getDW().getModelGroup().contains("TS0601") }
@@ -721,20 +733,20 @@ def parse(String description) {
                 parseBasicCluster( descMap )
                 break
             case 0x0006: // switch state
-                logDebug "parse: on/off cluster 0x0006 command ${descMap?.command} value ${value}"
+                logDebug "parse: on/off cluster 0x0006 command ${descMap?.command} attribute ${escMap?.attrId} value ${value}"
                 if (descMap?.command == "07" && descMap?.data.size() >= 1) {
-                    logDebug "parse: received Configure Reporting Response for cluster:${descMap.clusterInt} , data=${descMap.data} (Status: ${descMap.data[0]=="00" ? 'Success' : '<b>Failure</b>'})"
+                    logDebug "parse: received Configure Reporting Response for cluster:${descMap.clusterInt} attribute ${escMap?.attrId}, data=${descMap.data} (Status: ${descMap.data[0]=="00" ? 'Success' : '<b>Failure</b>'})"
                     break
                 }
                 if (descMap?.command == "0B" && descMap?.data.size() >= 2) {
                     String clusterCmd = descMap.data[0]
                     def status = descMap.data[1]
-                    logDebug "parse: received ZCL Command Response for cluster ${descMap.clusterInt} command ${descMap?.command}, data=${descMap.data} (Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
+                    logDebug "parse: received ZCL Command Response for cluster ${descMap.clusterInt} command ${descMap?.command} attribute ${escMap?.attrId}, data=${descMap.data} (Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
                     break
                 }
                 if (descMap?.attrId == "0000") {
                     if (isGirier() && descMap?.command == "01") {
-                        logDebug "parse: IGNORING command Response for cluster ${descMap.clusterInt} command ${descMap?.command}"
+                        logDebug "parse: IGNORING command Response for cluster ${descMap.clusterInt} command ${descMap?.command} attribute ${escMap?.attrId}"
                     }
                     else {
                         child?.onSwitchState(value)
@@ -748,7 +760,7 @@ def parse(String description) {
                     }
                 }
                 else {
-                    logDebug "parse: unsupported attribute ${descMap?.attrId} cluster ${descMap.clusterId} command ${clusterCmd}, data=${descMap.data}"
+                    logDebug "parse: unsupported attribute ${descMap?.attrId} cluster ${descMap.clusterId} command ${descMap?.command}, data=${descMap.data}"
                 }
                 break
             case 0x0008: // switch level state
@@ -759,7 +771,7 @@ def parse(String description) {
                 if (descMap?.command == "0B" && descMap?.data.size() >= 2) {
                     String clusterCmd = descMap.data[0]
                     def status = descMap.data[1]
-                    logDebug "parse: received ZCL Command Response for cluster ${descMap.clusterId} command ${clusterCmd}, data=${descMap.data} (Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
+                    logDebug "parse: received ZCL Command Response for cluster ${descMap.clusterId} command ${descMap?.command}, data=${descMap.data} (Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
                     break
                 }
                 logDebug "parse: switch level cluster 0x0008 endpoint ${descMap?.endpoint} command ${descMap?.command} attrId ${descMap?.attrId} value raw ${value})"
@@ -783,10 +795,10 @@ def parse(String description) {
                     logInfo "light type is '${TS110ELightTypeOptions.options[value]}' (0x${descMap.value})"
                     //device.updateSetting('lightType', [value: value.toString(), type: 'enum'])
                 } else if (descMap?.attrId == "FC03") {
-                    logInfo "minLevel is '${TS110ELightTypeOptions.options[value]}' (0x${descMap.value})"
+                    logInfo "minLevel is ${value} (0x${descMap.value})"
                     //device.updateSetting('minLevel', [value: value, type: 'number'])
                 } else if (descMap?.attrId == "FC04") {
-                    logInfo "maxLevel is '${TS110ELightTypeOptions.options[value]}' (0x${descMap.value})"
+                    logInfo "maxLevel is ${value} (0x${descMap.value})"
                     //device.updateSetting('maxLevel', [value: value, type: 'number'])
                 }
                 else {
@@ -813,11 +825,11 @@ Tuya cluster EF00 specific code
 */
 
 def tuyaBlackMagic() {
-    /*
+    
     def ep = safeToInt(state.destinationEP ?: 01)
     if (ep==null || ep==0) ep = 1
-    */
-    return zigbee.readAttribute(0x0000, [0x0004, 0x000, 0x0001, 0x0005, 0x0007, 0xfffe], [:]/*[destEndpoint :ep]*/, delay=200)
+    
+    return zigbee.readAttribute(0x0000, [0x0004, 0x000, 0x0001, 0x0005, 0x0007, 0xfffe], [destEndpoint :ep], delay=200)
 }
 
 def parseTuyaCluster( descMap ) {
@@ -1580,6 +1592,79 @@ def test(String description) {
     log.warn "test parsing : ${description}"
     parse( description)
 }
+
+def testRefresh() {
+    logWarn "testRefresh: see the live logs"
+    ArrayList<String> cmds = []
+    def ep = safeToInt(getDestinationEP())
+    cmds = zigbee.readAttribute(0x0000, [0x0001, 0x0002, 0x0003, 0x0004, 0x0005, 0x0006], [destEndpoint:ep], delay=200)
+    // commands : off:0 on:1 toggle:2
+    cmds += zigbee.readAttribute(0x0006, 0x0000, [destEndpoint:ep], delay = 200)    // On/Off
+    cmds += zigbee.readAttribute(0x0006, 0x4000, [destEndpoint:ep], delay = 200)    // globalSceneCtrl, boolean
+    cmds += zigbee.readAttribute(0x0006, 0x4001, [destEndpoint:ep], delay = 200)    // OnTime, uint16
+    cmds += zigbee.readAttribute(0x0006, 0x4002, [destEndpoint:ep], delay = 200)    // OffWaitTime, uint16
+    cmds += zigbee.readAttribute(0x0006, 0x4003, [destEndpoint:ep], delay = 200)    // startUpOnOff, enum8
+    cmds += zigbee.readAttribute(0x0006, 0x5000, [destEndpoint:ep], delay = 200)    // tuyaBacklightSwitch, enum8
+    cmds += zigbee.readAttribute(0x0006, 0x8001, [destEndpoint:ep], delay = 200)    // IndicatorMode: 1 (backlight), enum8
+    cmds += zigbee.readAttribute(0x0006, 0x8002, [destEndpoint:ep], delay = 200)    // RestartStatus: 2 , enum8
+    cmds += zigbee.readAttribute(0x0006, 0x8004, [destEndpoint:ep], delay = 200)    // OperationMode, enum8
+    
+    // commands: moveToLevel:0 (level:uint8, transtime:uint16)              move:1 (movemode:uint8, rate:uint8)                        step:2 (stepmode:uint8, stepsize:uint8, transtime:uint16 )          stop:3 ()
+    // commands: moveToLevelWithOnOff:4 (level:uint8, transtime:uint16)     moveWithOnOff:5 (movemode:uint8, rate:uint8)               stepWithOnOff:6 (stepmode:uint8, stepsize:uint8, transtime:uint16 )
+    // commands: stopWithOnOff:7 ()                                         moveToLevelTuya:0xF0 (level:uint16, transtime:uint16)
+    // commands: 
+    cmds += zigbee.readAttribute(0x0008, 0x0000, [destEndpoint:ep], delay = 200)    // current level, uint8
+    cmds += zigbee.readAttribute(0x0008, 0x0001, [destEndpoint:ep], delay = 200)    // remainingTime, uint16 - GLEDOPTO, Philips Hue
+    cmds += zigbee.readAttribute(0x0008, 0x0002, [destEndpoint:ep], delay = 200)    // minLevel, uint8
+    cmds += zigbee.readAttribute(0x0008, 0x0003, [destEndpoint:ep], delay = 200)    // maxLevel, uint8
+    cmds += zigbee.readAttribute(0x0008, 0x000F, [destEndpoint:ep], delay = 200)    // options, bitmap8      - Philips Hue
+    cmds += zigbee.readAttribute(0x0008, 0x0010, [destEndpoint:ep], delay = 200)    // 
+    cmds += zigbee.readAttribute(0x0008, 0x0011, [destEndpoint:ep], delay = 200)    // 
+    cmds += zigbee.readAttribute(0x0008, 0x0012, [destEndpoint:ep], delay = 200)    // 
+    cmds += zigbee.readAttribute(0x0008, 0x0013, [destEndpoint:ep], delay = 200)    // 
+    cmds += zigbee.readAttribute(0x0008, 0x0014, [destEndpoint:ep], delay = 200)    // 
+    cmds += zigbee.readAttribute(0x0008, 0xF000, [destEndpoint:ep], delay = 200)    // 
+    cmds += zigbee.readAttribute(0x0008, 0x00F0, [destEndpoint:ep], delay = 200)    // 
+    cmds += zigbee.readAttribute(0x0008, 0xFC02, [destEndpoint:ep], delay = 200)    // 
+    cmds += zigbee.readAttribute(0x0008, 0xFC03, [destEndpoint:ep], delay = 200)    // 
+    cmds += zigbee.readAttribute(0x0008, 0xFC04, [destEndpoint:ep], delay = 200)    // 
+
+    cmds += zigbee.readAttribute(0xE000, 0xD001, [destEndpoint:ep], delay = 200)    // encoding:42, value:AAAA; attrId: D001, encoding: 48, value: 020006
+    cmds += zigbee.readAttribute(0xE000, 0xD002, [destEndpoint:ep], delay = 200)    // encoding: 48, value: 02000A
+    cmds += zigbee.readAttribute(0xE000, 0xD003, [destEndpoint:ep], delay = 200)
+    
+    cmds += zigbee.readAttribute(0xE001, 0xD010, [destEndpoint:ep], delay = 200)    // powerOnBehavior: {ID: 0xD010, type: DataType.enum8},
+    cmds += zigbee.readAttribute(0xE001, 0xD030, [destEndpoint:ep], delay = 200)    // switchType: {ID: 0xD030, type: DataType.enum8},
+    
+    sendZigbeeCommands(cmds)
+}
+
+def testX() {
+    //log.trace "zigbee.setLevel = ${zigbee.setLevel(999)}"
+    //log.trace "deviceProfilesV2 = ${deviceProfilesV2}"
+}
+
+// https://developer.tuya.com/en/docs/iot/tuya-smart-dimmer-switch-single-phrase-input-without-neutral-line?id=K9ik6zvokodvn#subtitle-10-Private%20cluster 
+// https://github.com/Koenkk/zigbee2mqtt/discussions/7608#discussioncomment-1614827
+/*
+ID	    Name	                        Data type	    Range	        Defualt value
+0xFC00	Level control max min	        uint16 -0x21    0x0000 - 0xffff	0x01ff
+0xFC02	Level control bulb type	        uint8 -0x20	    0x00–0xFF	    0x00
+0xFC03	Level control scr state	        uint8 -0x20	    0x00–0xFF	    0x01
+0xFC04	Level control current percentage uint8 -0x20	0x00–0xFF	    0x01
+0xFC05	Level control min percentage	uint8 -0x20	    0x00–0xFF	    0x01
+*/
+
+
+/*
+// https://github.com/jonnylangefeld/home-assistant/blob/0a947da5d38421947b9945420ac96d467b6c3392/deps/zhaquirks/tuya/ts110e.py
+TUYA_LEVEL_ATTRIBUTE = 0xF000            // (uint16) # 0xF000 reported values are 10-1000, must be converted to 0-254  => value = (value + 4 - 10) * 254 // (1000 - 10) 
+//                                          # convert dim values to 10-1000 =>             brightness = args[0] * (1000 - 10) // 254 + 10
+TUYA_BULB_TYPE_ATTRIBUTE = 0xFC02        // (enum8)    LED = 0x00    INCANDESCENT = 0x01    HALOGEN = 0x02
+TUYA_MIN_LEVEL_ATTRIBUTE = 0xFC03        // (uint16)
+TUYA_MAX_LEVEL_ATTRIBUTE = 0xFC04    	 // (uint16)
+TUYA_CUSTOM_LEVEL_COMMAND = 0x00F0       // 
+*/
 
 
 
