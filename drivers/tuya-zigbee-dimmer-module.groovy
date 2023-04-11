@@ -55,7 +55,7 @@ ver 0.3.0  2023/03/12 kkossev      - bugfix: TS110E/F configiration for the auto
 ver 0.4.0  2023/03/25 kkossev      - added TS110E _TZ3210_pagajpog; added advancedOptions; added forcedProfile; added deviceProfilesV2; added initialize() command; sendZigbeeCommands() in all Command handlers; configure() and updated() do not re-initialize the device!; setDeviceNameAndProfile(); destEP here and there
 ver 0.4.1  2023/03/31 kkossev      - added new TS110E_GIRIER_DIMMER product profile (Girier _TZ3210_k1msuvg6 support @jshimota); installed() initialization and configuration sequence changed'; fixed GIRIER Toggle command not working; added _TZ3210_4ubylghk
 ver 0.4.2  2023/04/10 kkossev      - (dev. branch) added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device; all Current States are cleared on Initialize; Lonsonho brightness control; Hubitat 'F2 bug' patched; Lonsonho change level uses cluster 0x0008
-ver 0.4.3  2023/04/10 kkossev      - (dev. branch) numEps bug fix; generic ZCL dimmer support; 
+ver 0.4.3  2023/04/11 kkossev      - (dev. branch) numEps bug fix; generic ZCL dimmer support; patch for Girier firmware bug on Refresh command 01 reporting off state; added testRefresh
 *
 *                                   TODO: bugfix when endpointId: 0B
 *                                   TODO: remove obsolete deviceSumulation options;
@@ -67,7 +67,7 @@ ver 0.4.3  2023/04/10 kkossev      - (dev. branch) numEps bug fix; generic ZCL d
 */
 
 def version() { "0.4.3" }
-def timeStamp() {"2023/04/09 11:57 PM"}
+def timeStamp() {"2023/04/11 6:10 PM"}
 
 import groovy.transform.Field
 
@@ -251,6 +251,13 @@ metadata {
         
         command "toggle"
         command "initialize", [[name: "Initialize the sensor after switching drivers.  \n\r   ***** Will load device default values! *****" ]]
+        
+        command "testRefresh", [[name: "see the live logs" ]]
+        command "testLevel", [
+                [name:"command",  type: "ENUM",   description: "setLevel method", constraints: ["Method 1", "Method 2", "Method 3"]],
+                [name:"level",    type: "STRING", description: "Level", constraints: ["STRING"]],
+                [name:"duration", type: "STRING", description: "Duration", constraints: ["STRING"]]
+            ]        
         
         if (_DEBUG == true) {
             command "zTest", [
@@ -704,29 +711,43 @@ def parse(String description) {
             child = getChildByEndpointId(descMap.endpoint)
             isFirst = 0 == endpointIdToIndex(descMap.endpoint)
         }
-            
+        if (descMap.data != null && descMap.data?.size()>=3 && descMap.data[2] == "86" && descMap.command == "01") {
+            logDebug "Read attribute response: unsupported Attributte ${descMap.data[1] + descMap.data[0]} cluster ${descMap.clusterId}"
+            return
+        }
         switch (descMap.clusterInt) {
             case 0x0000: // basic cluster
                 parseBasicCluster( descMap )
                 break
             case 0x0006: // switch state
-            logDebug "parse: on/off cluster 0x0006 command ${descMap?.command} value ${value}"
+                logDebug "parse: on/off cluster 0x0006 command ${descMap?.command} value ${value}"
                 if (descMap?.command == "07" && descMap?.data.size() >= 1) {
-                    logDebug "parse: received Configure Reporting Response for cluster:${descMap.clusterId} , data=${descMap.data} (Status: ${descMap.data[0]=="00" ? 'Success' : '<b>Failure</b>'})"
+                    logDebug "parse: received Configure Reporting Response for cluster:${descMap.clusterInt} , data=${descMap.data} (Status: ${descMap.data[0]=="00" ? 'Success' : '<b>Failure</b>'})"
                     break
                 }
                 if (descMap?.command == "0B" && descMap?.data.size() >= 2) {
                     String clusterCmd = descMap.data[0]
                     def status = descMap.data[1]
-                    logDebug "parse: received ZCL Command Response for cluster ${descMap.clusterId} command ${clusterCmd}, data=${descMap.data} (Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
+                    logDebug "parse: received ZCL Command Response for cluster ${descMap.clusterInt} command ${descMap?.command}, data=${descMap.data} (Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
                     break
                 }
-                child?.onSwitchState(value)
-                if (isFirst && child != this) {
-                    logDebug "parse: replicating switchState in parent"
-                    onSwitchState(value)
-                } else {
-                    logDebug "parse: isFirst=${isFirst} this=${this} child=${child} value=${value}"
+                if (descMap?.attrId == "0000") {
+                    if (isGirier() && descMap?.command == "01") {
+                        logDebug "parse: IGNORING command Response for cluster ${descMap.clusterInt} command ${descMap?.command}"
+                    }
+                    else {
+                        child?.onSwitchState(value)
+                        if (isFirst && child != this) {
+                            logDebug "parse: replicating switchState in parent"
+                            onSwitchState(value)
+                        } 
+                        else {
+                            logDebug "parse: isFirst=${isFirst} this=${this} child=${child} value=${value}"
+                        }
+                    }
+                }
+                else {
+                    logDebug "parse: unsupported attribute ${descMap?.attrId} cluster ${descMap.clusterId} command ${clusterCmd}, data=${descMap.data}"
                 }
                 break
             case 0x0008: // switch level state
@@ -768,7 +789,7 @@ def parse(String description) {
                     //device.updateSetting('maxLevel', [value: value, type: 'number'])
                 }
                 else {
-                    logDebug "parse: UNPROCESSED switch level cluster 0x0008 command ${descMap?.command} attrId ${descMap?.attrId} value raw: (${value})"
+                    logDebug "parse: UNPROCESSED attrubute ${descMap?.attrId} switch level cluster 0x0008 command ${descMap?.command}  value raw: (${value})"
                 }
                 break
             case 0x8021: 
@@ -1211,7 +1232,7 @@ def configure() {
 
 // called on hub startup if driver specifies capability "Initialize" (otherwise is not required or automatically called if present)
 def initialize() {
-    logDebug "<b>initialize()</b> ... ${getDeviceInfo()}"
+    log.info "<b>initialize()</b> ... ${getDeviceInfo()}"
     initializeVars( fullInit = true )
     configure()
 }
@@ -1234,8 +1255,9 @@ def getDestinationEP() {
 }
 
 void initializeVars( boolean fullInit = false ) {
-    logInfo "InitializeVars( fullInit = ${fullInit} )..."
+    log.info "InitializeVars( fullInit = ${fullInit} )..."
     if (fullInit == true) {
+        /* settings = [:] */ // exception when copying settings to the child devices! // use clearSetting(key) 
         unschedule()
         state.clear()
         device.deleteCurrentState()
