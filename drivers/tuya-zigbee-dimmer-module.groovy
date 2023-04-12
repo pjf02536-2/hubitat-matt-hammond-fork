@@ -54,15 +54,14 @@ ver 0.2.12 2023/03/12 kkossev      - more debug logging; fixed incorrect on/off 
 ver 0.3.0  2023/03/12 kkossev      - bugfix: TS110E/F configiration for the automatic level reporting was not working.
 ver 0.4.0  2023/03/25 kkossev      - added TS110E _TZ3210_pagajpog; added advancedOptions; added forcedProfile; added deviceProfilesV2; added initialize() command; sendZigbeeCommands() in all Command handlers; configure() and updated() do not re-initialize the device!; setDeviceNameAndProfile(); destEP here and there
 ver 0.4.1  2023/03/31 kkossev      - added new TS110E_GIRIER_DIMMER product profile (Girier _TZ3210_k1msuvg6 support @jshimota); installed() initialization and configuration sequence changed'; fixed GIRIER Toggle command not working; added _TZ3210_4ubylghk
-ver 0.4.2  2023/04/10 kkossev      - (dev. branch) added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device; all Current States are cleared on Initialize; Lonsonho brightness control; Hubitat 'F2 bug' patched; Lonsonho change level uses cluster 0x0008
-ver 0.4.3  2023/04/12 kkossev      - (dev. branch) numEps bug fix; generic ZCL dimmer support; patch for Girier firmware bug on Refresh command 01 reporting off state; DeviceWrapper fixes; added TS0505B_TUYA_BULB
+ver 0.4.2  2023/04/10 kkossev      - added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device; all Current States are cleared on Initialize; Lonsonho brightness control; Hubitat 'F2 bug' patched; Lonsonho change level uses cluster 0x0008
+ver 0.4.3  2023/04/12 kkossev      - numEps bug fix; generic ZCL dimmer support; patch for Girier firmware bug on Refresh command 01 reporting off state; DeviceWrapper fixes; added TS0505B_TUYA_BULB; bugfix when endpointId is different than 01
 *
-*                                   TODO: bugfix when endpointId: 0B
 *                                   TODO: remove obsolete deviceSumulation options;
 *                                   TODO: add 'Health Check' capability and scheduled jobs
 *                                   TODO: TS110E_GIRIER_DIMMER TS011E power_on_behavior_1, TS110E_switch_type ['toggle', 'state', 'momentary']) (TS110E_options - needsMagic())
 *                                   TODO: Tuya Fan Switch support
-*                                   TODO: add TS110E 'light_type', 'switch_type']
+*                                   TODO: add TS110E 'light_type', 'switch_type'
 *
 */
 
