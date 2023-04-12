@@ -54,20 +54,20 @@ ver 0.2.12 2023/03/12 kkossev      - more debug logging; fixed incorrect on/off 
 ver 0.3.0  2023/03/12 kkossev      - bugfix: TS110E/F configiration for the automatic level reporting was not working.
 ver 0.4.0  2023/03/25 kkossev      - added TS110E _TZ3210_pagajpog; added advancedOptions; added forcedProfile; added deviceProfilesV2; added initialize() command; sendZigbeeCommands() in all Command handlers; configure() and updated() do not re-initialize the device!; setDeviceNameAndProfile(); destEP here and there
 ver 0.4.1  2023/03/31 kkossev      - added new TS110E_GIRIER_DIMMER product profile (Girier _TZ3210_k1msuvg6 support @jshimota); installed() initialization and configuration sequence changed'; fixed GIRIER Toggle command not working; added _TZ3210_4ubylghk
-ver 0.4.2  2023/04/10 kkossev      - (dev. branch) added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device; all Current States are cleared on Initialize; Lonsonho brightness control; Hubitat 'F2 bug' patched; Lonsonho change level uses cluster 0x0008
-ver 0.4.3  2023/04/12 kkossev      - (dev. branch) numEps bug fix; generic ZCL dimmer support; patch for Girier firmware bug on Refresh command 01 reporting off state; DeviceWrapper fixes; added TS0505B_TUYA_BULB
+ver 0.4.2  2023/04/10 kkossev      - added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device; all Current States are cleared on Initialize; Lonsonho brightness control; Hubitat 'F2 bug' patched; Lonsonho change level uses cluster 0x0008
+ver 0.4.3  2023/04/12 kkossev      - numEps bug fix; generic ZCL dimmer support; patch for Girier firmware bug on Refresh command 01 reporting off state; DeviceWrapper fixes; added TS0505B_TUYA_BULB; bugfix when endpointId is different than 01
+ver 0.4.4  2023/04/12 kkossev      - (dev.branch) added capability 'Health Check'
 *
-*                                   TODO: bugfix when endpointId: 0B
+*                                   TODO: TS0601 second/third gang is not working?
 *                                   TODO: remove obsolete deviceSumulation options;
-*                                   TODO: add 'Health Check' capability and scheduled jobs
 *                                   TODO: TS110E_GIRIER_DIMMER TS011E power_on_behavior_1, TS110E_switch_type ['toggle', 'state', 'momentary']) (TS110E_options - needsMagic())
 *                                   TODO: Tuya Fan Switch support
-*                                   TODO: add TS110E 'light_type', 'switch_type']
+*                                   TODO: add TS110E 'light_type', 'switch_type'
 *
 */
 
-def version() { "0.4.3" }
-def timeStamp() {"2023/04/12 7:44 PM"}
+def version() { "0.4.4" }
+def timeStamp() {"2023/04/12 11:41 PM"}
 
 import groovy.transform.Field
 
@@ -267,6 +267,9 @@ metadata {
         capability "Light"
         capability "Switch"
         capability "SwitchLevel"
+        capability 'Health Check'
+        
+        attribute 'healthStatus', 'enum', [ 'unknown', 'offline', 'online' ]
         
         command "toggle"
         command "initialize", [[name: "Initialize the sensor after switching drivers.  \n\r   ***** Will load device default values! *****" ]]
@@ -317,6 +320,8 @@ metadata {
             
         }
         */
+        input name: 'healthCheckInterval', type: 'enum', title: '<b>Healthcheck Interval</b>', options: HealthcheckIntervalOpts.options, defaultValue: HealthcheckIntervalOpts.defaultValue, required: true, description:\
+            '<i>Changes how often the hub pings the bulb to check health.</i>'
         input (name: "advancedOptions", type: "bool", title: "Advanced Options", description: "<i>May not work for all device types!</i>", defaultValue: false)
         if (advancedOptions == true) {
             input (name: "forcedProfile", type: "enum", title: "<b>Device Profile</b>", description: "<i>Forcely change the Device Profile, if the model/manufacturer was not recognized automatically.<br>Warning! Manually setting a device profile may not always work!</i>", 
@@ -326,6 +331,7 @@ metadata {
     }
 }
 
+@Field static final int COMMAND_TIMEOUT = 10            // Command timeout before setting healthState to offline
 @Field static final String UNKNOWN =  'UNKNOWN'
 @Field static final int DEFAULT_MIN_LEVEL = 0
 @Field static final int DEFAULT_MAX_LEVEL = 100
@@ -335,6 +341,10 @@ metadata {
 @Field static final int TS110E_LONSONHO_MAX_LEVEL_ATTR = 0xFC04
 @Field static final int TS110E_LONSONHO_CUSTOM_LEVEL_CMD = 0x00F0
 
+@Field static Map HealthcheckIntervalOpts = [
+    defaultValue: 10,
+    options: [ 10: 'Every 10 Mins', 15: 'Every 15 Mins', 30: 'Every 30 Mins', 45: 'Every 45 Mins', '59': 'Every Hour', '00': 'Disabled' ]
+]
 @Field static final Map TS110ESwitchTypeOptions = [           // 0xFC00 (64512)
     defaultValue: 0,
     options     : [0: 'momentary', 1: 'toggle', 2: 'state']
@@ -474,6 +484,7 @@ if parent, then act on endpoint 1
 
 // sends Zigbee commands to refresh the switch and the level
 def refresh() {
+    scheduleCommandTimeoutCheck()
     if (isParent()) {
         logDebug "refresh: parent ${indexToChildDni(0)}"
         ArrayList<String> cmds = cmdRefresh(indexToChildDni(0))
@@ -486,6 +497,7 @@ def refresh() {
 
 // sends Zigbee commands to turn the switch on
 def on() {
+    scheduleCommandTimeoutCheck()
     if (isParent()) {
         sendZigbeeCommands(cmdSwitch(indexToChildDni(0), 1))
     } else {
@@ -495,6 +507,7 @@ def on() {
 
 // sends Zigbee commands to turn the switch off
 def off() {
+    scheduleCommandTimeoutCheck()
     if (isParent()) {
         sendZigbeeCommands(cmdSwitch(indexToChildDni(0), 0))
     } else {
@@ -504,6 +517,7 @@ def off() {
 
 // sends Zigbee commands to toggle the switch
 def toggle() {
+    scheduleCommandTimeoutCheck()
     logDebug("toggle: ... getParent()=${getParent()}")
     if (isParent()) {
         sendZigbeeCommands(cmdSwitchToggle(indexToChildDni(0)))
@@ -514,6 +528,7 @@ def toggle() {
 
 // sends Zigbee commands to set level
 def setLevel(level, duration=0) {
+    scheduleCommandTimeoutCheck()
     if (settings.autoRefresh == true) {
         runIn(1, 'refresh')
     }
@@ -697,6 +712,8 @@ def doActions(List<String> cmds) {
 
 def parse(String description) {
     checkDriverVersion()
+    sendHealthStatusEvent('online')
+    unschedule('deviceCommandTimeout')
     logDebug "parse: received raw description: ${description}"
 
     if (isParent()) {
@@ -1251,6 +1268,9 @@ def getDeviceInfo() {
 //  will be the first function called just once when paired as a new device. Not called again on consequent re-pairings !
 def installed() {
     logDebug "<b>installed()</b> ... ${getDeviceInfo()}"
+    sendEvent(name: 'level', value: 0, unit: '%')
+    sendEvent(name: 'switch', value: 'off')
+    sendEvent(name: 'healthStatus', value: 'unknown')
 }
 
 // called every time the device is paired to the HUB (both as new or as an existing device)
@@ -1315,6 +1335,12 @@ void initializeVars( boolean fullInit = false ) {
 def updated() {
     logDebug "<b>updated()</b> ... ${getDeviceInfo()}"
     checkDriverVersion()
+
+    int interval = (settings.healthCheckInterval as Integer) ?: 0
+    if (interval > 0) {
+        log.info "scheduling health check every ${interval} minutes"
+        scheduleDeviceHealthCheck(interval)
+    }
       
     // version 0.3.1
     if (settings?.forcedProfile != null) {
@@ -1375,7 +1401,7 @@ def updated() {
     }
     if (isParent()) {
         logDebug "updated parent->child"
-        getChildByEndpointId(indexToEndpointId(0)).onParentSettingsChange(settings)
+        getChildByEndpointId(indexToEndpointId(0))?.onParentSettingsChange(settings)
     } else {
         logDebug "updated child->parent"
         parent?.onChildSettingsChange(device.deviceNetworkId, settings)
@@ -1597,6 +1623,40 @@ def setDeviceNameAndProfile( model=null, manufacturer=null) {
     }    
 }
 
+//----------------------------
+
+private void sendHealthStatusEvent(String status) {
+    if (device.currentValue('healthStatus') != status) {
+        String descriptionText = "healthStatus was set to ${status}"
+        sendEvent(name: 'healthStatus', value: status, descriptionText: descriptionText)
+        logInfo "${descriptionText}"
+    }
+}
+
+private void scheduleCommandTimeoutCheck(int delay = COMMAND_TIMEOUT) {
+    runIn(delay, 'deviceCommandTimeout')
+}
+
+
+void deviceCommandTimeout() {
+    logWarn 'no response received (device offline?)'
+    sendHealthStatusEvent('offline')
+}
+
+private void scheduleDeviceHealthCheck(int intervalMins) {
+    Random rnd = new Random()
+    schedule("${rnd.nextInt(59)} ${rnd.nextInt(9)}/${intervalMins} * ? * * *", 'ping')
+}
+
+List<String> ping() {
+    logInfo 'ping...' 
+    def ep = safeToInt(getDestinationEP())
+    // Using attribute 0x01 as a simple ping/pong mechanism
+    scheduleCommandTimeoutCheck()
+    return zigbee.readAttribute(zigbee.BASIC_CLUSTER, 0x01, [destEndpoint:ep], 0)
+}
+
+//----------------------------
 
 def zTest( dpCommand, dpValue, dpTypeString ) {
     ArrayList<String> cmds = []
