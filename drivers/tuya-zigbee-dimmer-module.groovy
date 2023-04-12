@@ -55,7 +55,7 @@ ver 0.3.0  2023/03/12 kkossev      - bugfix: TS110E/F configiration for the auto
 ver 0.4.0  2023/03/25 kkossev      - added TS110E _TZ3210_pagajpog; added advancedOptions; added forcedProfile; added deviceProfilesV2; added initialize() command; sendZigbeeCommands() in all Command handlers; configure() and updated() do not re-initialize the device!; setDeviceNameAndProfile(); destEP here and there
 ver 0.4.1  2023/03/31 kkossev      - added new TS110E_GIRIER_DIMMER product profile (Girier _TZ3210_k1msuvg6 support @jshimota); installed() initialization and configuration sequence changed'; fixed GIRIER Toggle command not working; added _TZ3210_4ubylghk
 ver 0.4.2  2023/04/10 kkossev      - (dev. branch) added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device; all Current States are cleared on Initialize; Lonsonho brightness control; Hubitat 'F2 bug' patched; Lonsonho change level uses cluster 0x0008
-ver 0.4.3  2023/04/11 kkossev      - (dev. branch) numEps bug fix; generic ZCL dimmer support; patch for Girier firmware bug on Refresh command 01 reporting off state; added testRefresh; DeviceWrapper fixes; added TS0505B_TUYA_BULB
+ver 0.4.3  2023/04/12 kkossev      - (dev. branch) numEps bug fix; generic ZCL dimmer support; patch for Girier firmware bug on Refresh command 01 reporting off state; DeviceWrapper fixes; added TS0505B_TUYA_BULB
 *
 *                                   TODO: bugfix when endpointId: 0B
 *                                   TODO: remove obsolete deviceSumulation options;
@@ -67,7 +67,7 @@ ver 0.4.3  2023/04/11 kkossev      - (dev. branch) numEps bug fix; generic ZCL d
 */
 
 def version() { "0.4.3" }
-def timeStamp() {"2023/04/11 11:57 PM"}
+def timeStamp() {"2023/04/12 7:44 PM"}
 
 import groovy.transform.Field
 
@@ -271,19 +271,18 @@ metadata {
         command "toggle"
         command "initialize", [[name: "Initialize the sensor after switching drivers.  \n\r   ***** Will load device default values! *****" ]]
         
-        command "testRefresh", [[name: "see the live logs" ]]
-        command "testLevel", [
-                [name:"command",  type: "ENUM",   description: "setLevel method", constraints: ["Method 1", "Method 2", "Method 3"]],
-                [name:"level",    type: "STRING", description: "Level", constraints: ["STRING"]],
-                [name:"duration", type: "STRING", description: "Duration", constraints: ["STRING"]]
-            ]        
-        
         if (_DEBUG == true) {
             command "zTest", [
                 [name:"dpCommand", type: "STRING", description: "Tuya DP Command", constraints: ["STRING"]],
                 [name:"dpValue",   type: "STRING", description: "Tuya DP value", constraints: ["STRING"]],
                 [name:"dpType",    type: "ENUM",   constraints: ["DP_TYPE_VALUE", "DP_TYPE_BOOL", "DP_TYPE_ENUM"], description: "DP data type"] 
             ]
+            command "testRefresh", [[name: "see the live logs" ]]
+            command "testLevel", [
+                [name:"command",  type: "ENUM",   description: "setLevel method", constraints: ["Method 1", "Method 2", "Method 3"]],
+                [name:"level",    type: "STRING", description: "Level", constraints: ["STRING"]],
+                [name:"duration", type: "STRING", description: "Duration", constraints: ["STRING"]]
+            ]        
             command "test", [[name: "test", type: "STRING", description: "test", constraints: ["STRING"]]]
             command "testX"
         }
@@ -649,6 +648,7 @@ def cmdSetLevel(String childDni, value, duration) {
         cmdTS011 = [
             "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 4  { 0x${intTo8bitUnsignedHex(value)} 0x${intTo16bitUnsignedHex(duration)} }",
             //"he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 0xF0 { 0x${intTo16bitUnsignedHex(value)} 0x${intTo16bitUnsignedHex(duration)} }",
+            //"he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 0xF0 { 0x0002 0x${intTo16bitUnsignedHex(duration)} }",
         ]
         logDebug "LONSONHO: cmdSetLevel: sending value ${value} cmdTS011=${cmdTS011}"
     }
