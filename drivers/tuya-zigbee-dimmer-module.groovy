@@ -1,4 +1,10 @@
-/* 
+/** For development only. Do not copy to Hubitat. */
+import com.hubitat.hub.executor.DeviceExecutor
+import groovy.transform.BaseScript
+
+@BaseScript DeviceExecutor deviceExecutor
+/**************************************************/
+/*
 =============================================================================
 Hubitat Elevation Driver for
 Tuya Zigbee dimmer modules (1-Gang and 2-Gang)
@@ -56,18 +62,19 @@ ver 0.4.0  2023/03/25 kkossev      - added TS110E _TZ3210_pagajpog; added advanc
 ver 0.4.1  2023/03/31 kkossev      - added new TS110E_GIRIER_DIMMER product profile (Girier _TZ3210_k1msuvg6 support @jshimota); installed() initialization and configuration sequence changed'; fixed GIRIER Toggle command not working; added _TZ3210_4ubylghk
 ver 0.4.2  2023/04/10 kkossev      - added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device; all Current States are cleared on Initialize; Lonsonho brightness control; Hubitat 'F2 bug' patched; Lonsonho change level uses cluster 0x0008
 ver 0.4.3  2023/04/12 kkossev      - numEps bug fix; generic ZCL dimmer support; patch for Girier firmware bug on Refresh command 01 reporting off state; DeviceWrapper fixes; added TS0505B_TUYA_BULB; bugfix when endpointId is different than 01
-ver 0.4.4  2023/04/12 kkossev      - (dev.branch) added capability 'Health Check'
+ver 0.4.4  2023/04/23 kkossev      - (dev.branch) added capability 'Health Check'
 *
 *                                   TODO: TS0601 second/third gang is not working?
 *                                   TODO: remove obsolete deviceSumulation options;
 *                                   TODO: TS110E_GIRIER_DIMMER TS011E power_on_behavior_1, TS110E_switch_type ['toggle', 'state', 'momentary']) (TS110E_options - needsMagic())
 *                                   TODO: Tuya Fan Switch support
 *                                   TODO: add TS110E 'light_type', 'switch_type'
+*                                   TODO: RTT measurement in the ping command; logsOff() after 24 hours; 
 *
 */
 
 def version() { "0.4.4" }
-def timeStamp() {"2023/04/12 11:41 PM"}
+def timeStamp() {"2023/04/23 8:54 PM"}
 
 import groovy.transform.Field
 
@@ -281,11 +288,13 @@ metadata {
                 [name:"dpType",    type: "ENUM",   constraints: ["DP_TYPE_VALUE", "DP_TYPE_BOOL", "DP_TYPE_ENUM"], description: "DP data type"] 
             ]
             command "testRefresh", [[name: "see the live logs" ]]
+            /*
             command "testLevel", [
                 [name:"command",  type: "ENUM",   description: "setLevel method", constraints: ["Method 1", "Method 2", "Method 3"]],
                 [name:"level",    type: "STRING", description: "Level", constraints: ["STRING"]],
                 [name:"duration", type: "STRING", description: "Duration", constraints: ["STRING"]]
-            ]        
+            ]
+            */
             command "test", [[name: "test", type: "STRING", description: "test", constraints: ["STRING"]]]
             command "testX"
         }
@@ -1335,6 +1344,11 @@ void initializeVars( boolean fullInit = false ) {
 def updated() {
     logDebug "<b>updated()</b> ... ${getDeviceInfo()}"
     checkDriverVersion()
+    
+    if (settings?.logEnable) {
+        logDebug settings
+        runIn(86400, logsOff)
+    }    
 
     int interval = (settings.healthCheckInterval as Integer) ?: 0
     if (interval > 0) {
@@ -1656,6 +1670,11 @@ List<String> ping() {
     return zigbee.readAttribute(zigbee.BASIC_CLUSTER, 0x01, [destEndpoint:ep], 0)
 }
 
+void logsOff() {
+    logInfo 'debug logging disabled...'
+    device.updateSetting('logEnable', [value: 'false', type: 'bool'])
+}
+
 //----------------------------
 
 def zTest( dpCommand, dpValue, dpTypeString ) {
@@ -1669,8 +1688,30 @@ def zTest( dpCommand, dpValue, dpTypeString ) {
 }
 
 def test(String description) {
+    /*
     log.warn "test parsing : ${description}"
     parse( description)
+*/
+    def lvl = valueToLevel(safeToInt(description))
+    log.warn "valueToLevel: value ${description} -> level ${lvl}"
+    def val = levelToValue( lvl )
+    log.warn "levelToValue: level ${lvl} -> value ${val}"
+    
+}
+
+def moveToLevelTuya( level, delay) {
+    /*
+            moveToLevelTuya: {
+                ID: 240,        0xF0
+                parameters: [
+                    {name: 'level', type: DataType.uint16},
+                    {name: 'transtime', type: DataType.uint16},
+                ],
+            },
+
+*/
+    
+    
 }
 
 def testRefresh() {
@@ -1746,5 +1787,9 @@ TUYA_MAX_LEVEL_ATTRIBUTE = 0xFC04    	 // (uint16)
 TUYA_CUSTOM_LEVEL_COMMAND = 0x00F0       // 
 */
 
+/*
+https://developer.tuya.com/en/docs/iot/tuya-zigbee-lighting-access-standard?id=K9ik6zvod83fi
+https://developer.tuya.com/en/docs/iot/tuya-zigbee-lighting-dimmer-swith-access-standard?id=K9ik6zvlvbqyw
 
+*/
 

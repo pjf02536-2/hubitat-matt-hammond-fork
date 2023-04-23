@@ -4,3 +4,12 @@
 .Trashes
 .Spotlight-V100
 drivers/tuya-zigbee-dimmer-module.groovy.bak
+out/
+hubitat-matt-hammond-fork.iml
+.idea/.gitignore
+.idea/encodings.xml
+.idea/misc.xml
+.idea/modules.xml
+.idea/vcs.xml
+.idea/libraries/groovy_2_4_21.xml
+.idea/libraries/groovy_4_0_6.xml
