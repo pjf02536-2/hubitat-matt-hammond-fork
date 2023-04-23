@@ -1,10 +1,4 @@
-/** For development only. Do not copy to Hubitat. */
-import com.hubitat.hub.executor.DeviceExecutor
-import groovy.transform.BaseScript
-
-@BaseScript DeviceExecutor deviceExecutor
-/**************************************************/
-/*
+/* 
 =============================================================================
 Hubitat Elevation Driver for
 Tuya Zigbee dimmer modules (1-Gang and 2-Gang)
@@ -62,7 +56,7 @@ ver 0.4.0  2023/03/25 kkossev      - added TS110E _TZ3210_pagajpog; added advanc
 ver 0.4.1  2023/03/31 kkossev      - added new TS110E_GIRIER_DIMMER product profile (Girier _TZ3210_k1msuvg6 support @jshimota); installed() initialization and configuration sequence changed'; fixed GIRIER Toggle command not working; added _TZ3210_4ubylghk
 ver 0.4.2  2023/04/10 kkossev      - added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device; all Current States are cleared on Initialize; Lonsonho brightness control; Hubitat 'F2 bug' patched; Lonsonho change level uses cluster 0x0008
 ver 0.4.3  2023/04/12 kkossev      - numEps bug fix; generic ZCL dimmer support; patch for Girier firmware bug on Refresh command 01 reporting off state; DeviceWrapper fixes; added TS0505B_TUYA_BULB; bugfix when endpointId is different than 01
-ver 0.4.4  2023/04/23 kkossev      - (dev.branch) added capability 'Health Check'
+ver 0.4.4  2023/04/23 kkossev      - added capability 'Health Check'; Lonsonho dimmers setLevel working now (parent device) !
 *
 *                                   TODO: TS0601 second/third gang is not working?
 *                                   TODO: remove obsolete deviceSumulation options;
@@ -74,7 +68,7 @@ ver 0.4.4  2023/04/23 kkossev      - (dev.branch) added capability 'Health Check
 */
 
 def version() { "0.4.4" }
-def timeStamp() {"2023/04/23 8:54 PM"}
+def timeStamp() {"2023/04/23 10:15 PM"}
 
 import groovy.transform.Field
 
@@ -664,15 +658,13 @@ def cmdSetLevel(String childDni, value, duration) {
         // Lonsonho brightness values are * 10       // unsigned 16 bit int 
         value = value * 10
         cmdTS011 = [
-            "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 4  { 0x${intTo16bitUnsignedHex(value)} 0x${intTo16bitUnsignedHex(duration)} }",
+            "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 0xF0  { 0x${intTo16bitUnsignedHex(value)} 0x${intTo16bitUnsignedHex(duration)} }",
         ]
         logDebug "LONSONHO: cmdSetLevel: sending value ${value} cmdTS011=${cmdTS011}"
     }
     else if ( isTuyaBulb()) {
         cmdTS011 = [
             "he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 4  { 0x${intTo8bitUnsignedHex(value)} 0x${intTo16bitUnsignedHex(duration)} }",
-            //"he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 0xF0 { 0x${intTo16bitUnsignedHex(value)} 0x${intTo16bitUnsignedHex(duration)} }",
-            //"he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0008 0xF0 { 0x0002 0x${intTo16bitUnsignedHex(duration)} }",
         ]
         logDebug "LONSONHO: cmdSetLevel: sending value ${value} cmdTS011=${cmdTS011}"
     }
