@@ -57,9 +57,12 @@ ver 0.4.1  2023/03/31 kkossev      - added new TS110E_GIRIER_DIMMER product prof
 ver 0.4.2  2023/04/10 kkossev      - added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device; all Current States are cleared on Initialize; Lonsonho brightness control; Hubitat 'F2 bug' patched; Lonsonho change level uses cluster 0x0008
 ver 0.4.3  2023/04/12 kkossev      - numEps bug fix; generic ZCL dimmer support; patch for Girier firmware bug on Refresh command 01 reporting off state; DeviceWrapper fixes; added TS0505B_TUYA_BULB; bugfix when endpointId is different than 01
 ver 0.4.4  2023/04/23 kkossev      - added capability 'Health Check'; Lonsonho dimmers setLevel working now (parent device) !
-ver 0.4.5  2023/05/17 kkossev      - (dev.branch) removed obsolete deviceSimulation options; added _TZ3210_ngqk6jia fingerprint1-gang (not fully working yet) 
-ver 0.4.6  2023/06/11 kkossev      - (dev.branch) child devices creation critical bug fix.
+ver 0.4.5  2023/05/17 kkossev      - removed obsolete deviceSimulation options; added _TZ3210_ngqk6jia fingerprint1-gang (not fully working yet) 
+ver 0.4.6  2023/06/11 kkossev      - child devices creation critical bug fix.
+ver 0.5.0  2023/06/11 kkossev      - (dev.branch) more bug fixes
 *
+*                                   TODO: (CH01) installed() ... model=null manufacturer=null
+*                                   TODO: no response received (device offline?) for child devices
 *                                   TODO: check _TZ3210_ngqk6jia - there was 2 gang same manufacturer?
 *                                   TODO: add Yes/No selection to Initialize() button
 *                                   TODO: TS0601 second/third gang is not working?
@@ -70,8 +73,8 @@ ver 0.4.6  2023/06/11 kkossev      - (dev.branch) child devices creation critica
 *
 */
 
-def version() { "0.4.6" }
-def timeStamp() {"2023/06/11 10:26 AM"}
+def version() { "0.5.0" }
+def timeStamp() {"2023/06/11 10:48 AM"}
 
 import groovy.transform.Field
 
