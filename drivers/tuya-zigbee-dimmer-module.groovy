@@ -59,10 +59,8 @@ ver 0.4.3  2023/04/12 kkossev      - numEps bug fix; generic ZCL dimmer support;
 ver 0.4.4  2023/04/23 kkossev      - added capability 'Health Check'; Lonsonho dimmers setLevel working now (parent device) !
 ver 0.4.5  2023/05/17 kkossev      - removed obsolete deviceSimulation options; added _TZ3210_ngqk6jia fingerprint1-gang (not fully working yet) 
 ver 0.4.6  2023/06/11 kkossev      - child devices creation critical bug fix.
-ver 0.5.0  2023/06/11 kkossev      - (dev.branch) more bug fixes
+ver 0.5.0  2023/06/11 kkossev      - (dev.branch) code cleanup; more bug fixes; added trace logging; fake offline for 2nd gang fixed; 
 *
-*                                   TODO: (CH01) installed() ... model=null manufacturer=null
-*                                   TODO: no response received (device offline?) for child devices
 *                                   TODO: check _TZ3210_ngqk6jia - there was 2 gang same manufacturer?
 *                                   TODO: add Yes/No selection to Initialize() button
 *                                   TODO: TS0601 second/third gang is not working?
@@ -74,15 +72,115 @@ ver 0.5.0  2023/06/11 kkossev      - (dev.branch) more bug fixes
 */
 
 def version() { "0.5.0" }
-def timeStamp() {"2023/06/11 10:48 AM"}
+def timeStamp() {"2023/06/11 11:14 PM"}
 
 import groovy.transform.Field
 
 @Field static final Boolean _DEBUG = false
+
+metadata {
+    definition (
+        name: "Tuya Zigbee dimmer module",
+        namespace: "matthammonddotorg",
+        author: "Matt Hammond",
+        description: "Driver for Tuya zigbee dimmer modules",
+        documentationLink: "https://github.com/matt-hammond-001/hubitat-code/blob/master/drivers/tuya-zigbee-dimmer-module.README.md",
+        importUrl: "https://raw.githubusercontent.com/kkossev/hubitat-matt-hammond-fork/development/drivers/tuya-zigbee-dimmer-module.groovy"
+    ) {
+        
+        capability "Configuration"
+        capability "Refresh"
+        capability "Light"
+        capability "Switch"
+        capability "SwitchLevel"
+        capability 'Health Check'
+        
+        attribute 'healthStatus', 'enum', [ 'unknown', 'offline', 'online' ]
+        
+        command "toggle"
+        command "initialize", [[name: "Initialize the sensor after switching drivers.  \n\r   ***** Will load device default values! *****" ]]
+        
+        if (_DEBUG == true) {
+            command "tuyaTest", [
+                [name:"dpCommand", type: "STRING", description: "Tuya DP Command", constraints: ["STRING"]],
+                [name:"dpValue",   type: "STRING", description: "Tuya DP value", constraints: ["STRING"]],
+                [name:"dpType",    type: "ENUM",   constraints: ["DP_TYPE_VALUE", "DP_TYPE_BOOL", "DP_TYPE_ENUM"], description: "DP data type"] 
+            ]
+            command "testRefresh", [[name: "see the live logs" ]]
+            command "test", [[name: "test", type: "STRING", description: "test", constraints: ["STRING"]]]
+            command "testX"
+        }
+        
+        modelConfigs.each{ data ->
+            fingerprint profileId: "0104",
+                inClusters: data.value.inClusters,
+                outClusters:"0019,000A",
+                model: data.value.model,
+                manufacturer: data.key,
+                deviceJoinName: data.value.joinName
+        }
+    }
+    
+    preferences {
+        input "debugEnable", "bool", title: "<b>Enable debug logging</b>", required: false, defaultValue: DEFAULT_DEBUG_OPT
+        input "infoEnable", "bool", title: "<b>Enable info logging</b>", required: false, defaultValue: true
+        input "autoOn", "bool", title: "<b>Turn on when level adjusted</b>", description: "<i>Switch turns on automatically when dimmer level is adjusted.</i>", required: true, multiple: false, defaultValue: true
+        input "autoRefresh", "bool", title: "<b>Auto refresh when level adjusted</b>", description: "<i>Automatically send an Refresh command when dimmer level is adjusted.</i>", required: true, multiple: false, defaultValue: false
+        
+        input "minLevel", "number", title: "<b>Minimum level</b>", description: "<i>Minimum brightness level (%). 0% on the dimmer level is mapped to this.</i>", required: true, multiple: false, defaultValue: DEFAULT_MIN_LEVEL
+            if (minLevel < 0) { minLevel = 0 } else if (minLevel > 99) { minLevel = 99 }
+
+        input "maxLevel", "number", title: "<b>Maximum level</b>", description: "<i>Maximum brightness level (%). 100% on the dimmer level is mapped to this.</i>", required: true, multiple: false, defaultValue: DEFAULT_MAX_LEVEL
+        if (maxLevel < minLevel) { maxLevel = DEFAULT_MAX_LEVEL } else if (maxLevel > DEFAULT_MAX_LEVEL) { maxLevel = DEFAULT_MAX_LEVEL }
+        /*
+        if (isTS110E()) {
+            input name: 'lightType', type: 'enum', title: '<b>Light Type</b>', options: TS110ELightTypeOptions.options, defaultValue: TS110ELightTypeOptions.defaultValue, description: \
+                '<i>Configures the lights type.</i>'
+            input name: 'switchType', type: 'enum', title: '<b>Switch Type</b>', options: TS110ESwitchTypeOptions.options, defaultValue: TS110ESwitchTypeOptions.defaultValue, description: \
+                '<i>Configures the switch type.</i>'
+            
+        }
+        */
+        input (name: "advancedOptions", type: "bool", title: "Advanced Options", description: "<i>May not work for all device types!</i>", defaultValue: false)
+        if (advancedOptions == true) {
+            input "traceEnable", "bool", title: "<b>Enable trace logging</b>", description: "<i>Even more detailed logging. Toggle it on if asked by the developer...</i>", required: false, defaultValue: false
+            input (name: "forcedProfile", type: "enum", title: "<b>Device Profile</b>", description: "<i>Forcely change the Device Profile, if the model/manufacturer was not recognized automatically.<br>Warning! Manually setting a device profile may not always work!</i>", 
+                   options: getDeviceProfilesMap() /*getDeviceProfiles()*/)
+            input name: 'healthCheckInterval', type: 'enum', title: '<b>Healthcheck Interval</b>', options: HealthcheckIntervalOpts.options, defaultValue: HealthcheckIntervalOpts.defaultValue, required: true, description:\
+                '<i>Changes how often the hub pings the bulb to check health.</i>'
+        }
+    }
+}
+
 @Field static final Boolean DEFAULT_DEBUG_OPT = true
-//@Field static final Boolean deviceSimulation = false
-//@Field static final String  simulatedModel = "TS110E"
-//@Field static final String  simulatedManufacturer = "_TZ3210_k1msuvg6"
+@Field static final int COMMAND_TIMEOUT = 10            // Command timeout before setting healthState to offline
+@Field static final String UNKNOWN =  'UNKNOWN'
+@Field static final int DEFAULT_MIN_LEVEL = 0
+@Field static final int DEFAULT_MAX_LEVEL = 100
+@Field static final int TS110E_LONSONHO_LEVEL_ATTR = 0xF000        // (61440) 
+@Field static final int TS110E_LONSONHO_BULB_TYPE_ATTR = 0xFC02
+@Field static final int TS110E_LONSONHO_MIN_LEVEL_ATTR = 0xFC03
+@Field static final int TS110E_LONSONHO_MAX_LEVEL_ATTR = 0xFC04
+@Field static final int TS110E_LONSONHO_CUSTOM_LEVEL_CMD = 0x00F0
+
+@Field static Map HealthcheckIntervalOpts = [
+    defaultValue: 10,
+    options: [ 10: 'Every 10 Mins', 15: 'Every 15 Mins', 30: 'Every 30 Mins', 45: 'Every 45 Mins', '59': 'Every Hour', '00': 'Disabled' ]
+]
+@Field static final Map TS110ESwitchTypeOptions = [           // 0xFC00 (64512)
+    defaultValue: 0,
+    options     : [0: 'momentary', 1: 'toggle', 2: 'state']
+]
+@Field static final Map TS110ELightTypeOptions = [            // 0xFC02 (64514), type: 0x20
+    defaultValue: 0,
+    options     : [0: 'led', 1: 'incandescent', 2: 'halogen']
+]
+@Field static final int TS110E_MIN_BRIGHTNESS = 0xFC03        // (64515)       // TODO: 0, 1000 -> 1, 255,  type: 0x21 Check !!!   
+@Field static final int TS110E_MAX_BRIGHTNESS = 0xFC04        // (64516)       // TODO: 0, 1000 -> 1, 255,  type: 0x21 -  Check !!!   
+// Girier TS110E may not support power-on-behavour?  https://github.com/Koenkk/zigbee2mqtt/issues/15902#issuecomment-1382848150     https://github.com/Koenkk/zigbee2mqtt/issues/16804 
+
+
+
 
 @Field static def modelConfigs = [
     "_TYZB01_v8gtiaed": [ numEps: 2, model: "TS110F", inClusters: "0000,0004,0005,0006,0008",     joinName: "Tuya Zigbee 2-Gang Dimmer module" ],                // '2 gang smart dimmer switch module with neutral'
@@ -260,112 +358,151 @@ def isGirier()             { return getDW().getModelGroup().contains("TS110E_GIR
 def isLonsonho()           { return getDW().getModelGroup().contains("TS110E_LONSONHO_DIMMER") }
 def isTuyaBulb()           { return getDW().getModelGroup().contains("TS0505B_TUYA_BULB") }
 
-metadata {
-    definition (
-        name: "Tuya Zigbee dimmer module",
-        namespace: "matthammonddotorg",
-        author: "Matt Hammond",
-        description: "Driver for Tuya zigbee dimmer modules",
-        documentationLink: "https://github.com/matt-hammond-001/hubitat-code/blob/master/drivers/tuya-zigbee-dimmer-module.README.md",
-        importUrl: "https://raw.githubusercontent.com/kkossev/hubitat-matt-hammond-fork/development/drivers/tuya-zigbee-dimmer-module.groovy"
-    ) {
-        
-        capability "Configuration"
-        capability "Refresh"
-        capability "Light"
-        capability "Switch"
-        capability "SwitchLevel"
-        capability 'Health Check'
-        
-        attribute 'healthStatus', 'enum', [ 'unknown', 'offline', 'online' ]
-        
-        command "toggle"
-        command "initialize", [[name: "Initialize the sensor after switching drivers.  \n\r   ***** Will load device default values! *****" ]]
-        
-        if (_DEBUG == true) {
-            command "zTest", [
-                [name:"dpCommand", type: "STRING", description: "Tuya DP Command", constraints: ["STRING"]],
-                [name:"dpValue",   type: "STRING", description: "Tuya DP value", constraints: ["STRING"]],
-                [name:"dpType",    type: "ENUM",   constraints: ["DP_TYPE_VALUE", "DP_TYPE_BOOL", "DP_TYPE_ENUM"], description: "DP data type"] 
-            ]
-            command "testRefresh", [[name: "see the live logs" ]]
-            /*
-            command "testLevel", [
-                [name:"command",  type: "ENUM",   description: "setLevel method", constraints: ["Method 1", "Method 2", "Method 3"]],
-                [name:"level",    type: "STRING", description: "Level", constraints: ["STRING"]],
-                [name:"duration", type: "STRING", description: "Duration", constraints: ["STRING"]]
-            ]
-            */
-            command "test", [[name: "test", type: "STRING", description: "test", constraints: ["STRING"]]]
-            command "testX"
-        }
-        
-        modelConfigs.each{ data ->
-            fingerprint profileId: "0104",
-                inClusters: data.value.inClusters,
-                outClusters:"0019,000A",
-                model: data.value.model,
-                manufacturer: data.key,
-                deviceJoinName: data.value.joinName
-        }
-    }
-    
-    preferences {
-        input "debugEnable", "bool", title: "<b>Enable debug logging</b>", required: false, defaultValue: DEFAULT_DEBUG_OPT
-        input "infoEnable", "bool", title: "<b>Enable info logging</b>", required: false, defaultValue: true
-        input "autoOn", "bool", title: "<b>Turn on when level adjusted</b>", description: "<i>Switch turns on automatically when dimmer level is adjusted.</i>", required: true, multiple: false, defaultValue: true
-        input "autoRefresh", "bool", title: "<b>Auto refresh when level adjusted</b>", description: "<i>Automatically send an Refresh command when dimmer level is adjusted.</i>", required: true, multiple: false, defaultValue: false
-        
-        input "minLevel", "number", title: "<b>Minimum level</b>", description: "<i>Minimum brightness level (%). 0% on the dimmer level is mapped to this.</i>", required: true, multiple: false, defaultValue: DEFAULT_MIN_LEVEL
-            if (minLevel < 0) { minLevel = 0 } else if (minLevel > 99) { minLevel = 99 }
 
-        input "maxLevel", "number", title: "<b>Maximum level</b>", description: "<i>Maximum brightness level (%). 100% on the dimmer level is mapped to this.</i>", required: true, multiple: false, defaultValue: DEFAULT_MAX_LEVEL
-        if (maxLevel < minLevel) { maxLevel = DEFAULT_MAX_LEVEL } else if (maxLevel > DEFAULT_MAX_LEVEL) { maxLevel = DEFAULT_MAX_LEVEL }
-        /*
-        if (isTS110E()) {
-            input name: 'lightType', type: 'enum', title: '<b>Light Type</b>', options: TS110ELightTypeOptions.options, defaultValue: TS110ELightTypeOptions.defaultValue, description: \
-                '<i>Configures the lights type.</i>'
-            input name: 'switchType', type: 'enum', title: '<b>Switch Type</b>', options: TS110ESwitchTypeOptions.options, defaultValue: TS110ESwitchTypeOptions.defaultValue, description: \
-                '<i>Configures the switch type.</i>'
-            
+void parse(String description) {
+    checkDriverVersion()
+    logTrace "parse: received raw description: ${description}"
+
+    if (isParent()) {
+        def descMap = [:]
+        try {
+            descMap = zigbee.parseDescriptionAsMap(description)
         }
-        */
-        input name: 'healthCheckInterval', type: 'enum', title: '<b>Healthcheck Interval</b>', options: HealthcheckIntervalOpts.options, defaultValue: HealthcheckIntervalOpts.defaultValue, required: true, description:\
-            '<i>Changes how often the hub pings the bulb to check health.</i>'
-        input (name: "advancedOptions", type: "bool", title: "Advanced Options", description: "<i>May not work for all device types!</i>", defaultValue: false)
-        if (advancedOptions == true) {
-            input (name: "forcedProfile", type: "enum", title: "<b>Device Profile</b>", description: "<i>Forcely change the Device Profile, if the model/manufacturer was not recognized automatically.<br>Warning! Manually setting a device profile may not always work!</i>", 
-                   options: getDeviceProfilesMap() /*getDeviceProfiles()*/)
-            
+        catch (e) {
+            logWarn "exception ${e} caught while parsing description:  ${description}"
         }
+        logDebug "parse: received descMap: ${descMap}"
+        if (description.startsWith("catchall")) {
+            logTrace "parse: catchall clusterId=${descMap?.clusterId} command=${descMap?.command} data=${descMap?.data}"
+            if (descMap?.clusterId == "EF00") {
+                parseTuyaCluster(descMap)
+                return
+            }
+            else {
+                logWarn "uprocessed catchall:  ${description}"
+            }
+        }
+        //
+        Integer value = 0
+        if (descMap?.value != null && descMap?.encoding != "42") {
+            try {
+                value = Integer.parseInt(descMap.value, 16)
+            }
+            catch (e) {
+                logWarn "exception ${e} caught while converting ${descMap?.value} to integer, encoding is ${descMap?.encoding}"
+            }
+        }
+        def child = this
+        def isFirst = true
+        if (descMap?.endpoint != null) {
+            child = getChildByEndpointId(descMap.endpoint)
+            isFirst = 0 == endpointIdToIndex(descMap.endpoint)
+        }
+        //
+        child?.sendHealthStatusEvent('online')
+        child?.unschedule('deviceCommandTimeout')
+        //
+        if (descMap.data != null && descMap.data?.size()>=3 && descMap.data[2] == "86" && descMap.command == "01") {
+            logDebug "Read attribute response: unsupported Attributte ${descMap.data[1] + descMap.data[0]} cluster ${descMap.clusterId}"
+            return
+        }
+        switch (descMap.clusterInt) {
+            case 0x0000: // basic cluster
+                parseBasicCluster( descMap )
+                break
+            case 0x0006: // switch state
+                logTrace "parse: on/off cluster 0x0006 command ${descMap?.command} attribute ${descMap?.attrId} value ${value}"
+                if (descMap?.command == "07" && descMap?.data.size() >= 1) {
+                    logDebug "parse: received Configure Reporting Response for cluster:${descMap.clusterInt} attribute ${escMap?.attrId}, data=${descMap.data} (Status: ${descMap.data[0]=="00" ? 'Success' : '<b>Failure</b>'})"
+                    break
+                }
+                if (descMap?.command == "0B" && descMap?.data.size() >= 2) {
+                    String clusterCmd = descMap.data[0]
+                    def status = descMap.data[1]
+                    logTrace "parse: received ZCL Command Response for cluster ${descMap.clusterInt} command ${descMap?.command} attribute ${descMap?.attrId}, data=${descMap.data} (Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
+                    break
+                }
+                if (descMap?.attrId == "0000") {
+                    if (isGirier() && descMap?.command == "01") {
+                        logDebug "parse: IGNORING command Response for cluster ${descMap.clusterInt} command ${descMap?.command} attribute ${escMap?.attrId}"
+                    }
+                    else {
+                        child?.onSwitchState(value)
+                        if (isFirst && child != this) {
+                            logTrace "parse: replicating switchState in parent"
+                            onSwitchState(value)
+                        } 
+                        else {
+                            logTrace "parse: isFirst=${isFirst} this=${this} child=${child} value=${value}"
+                        }
+                    }
+                }
+                else {
+                    logDebug "parse: unsupported attribute ${descMap?.attrId} cluster ${descMap.clusterId} command ${descMap?.command}, data=${descMap.data}"
+                }
+                break
+            case 0x0008: // switch level state
+                if (descMap?.command == "07" && descMap?.data.size() >= 1) {
+                    logDebug "parse: received Configure Reporting Response for cluster:${descMap.clusterId} , data=${descMap.data} (Status: ${descMap.data[0]=="00" ? 'Success' : '<b>Failure</b>'})"
+                    break
+                }
+                if (descMap?.command == "0B" && descMap?.data.size() >= 2) {
+                    String clusterCmd = descMap.data[0]
+                    def status = descMap.data[1]
+                    logDebug "parse: received ZCL Command Response for cluster ${descMap.clusterId} command ${descMap?.command}, data=${descMap.data} (Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
+                    break
+                }
+                logDebug "parse: switch level cluster 0x0008 endpoint ${descMap?.endpoint} command ${descMap?.command} attrId ${descMap?.attrId} value raw ${value})"
+                if (descMap?.attrId == "0000" || descMap?.attrId == "F000") {
+                    if (isTuyaBulb() && descMap?.attrId == "0000") {
+                        logDebug "parse: Tuya Bulb: child.onSwitchLevel value=${value} child=${child}"
+                    }                    
+                    else if (isLonsonho() && descMap?.attrId == "F000") {
+                        value = (value / 10) as int
+                    }
+                    else if (descMap?.attrId == "0000") {
+                        logDebug "parse: Tuya/Girier/OEM: child.onSwitchLevel value=${value} child=${child}"
+                    }
+                    else {
+                        logDebug "parse: SKIPPING  attrId ${descMap?.attrId} value raw ${value} !"        // TODO !!
+                        break
+                    }
+                    if (child != null) {
+                        child?.onSwitchLevel((value) as int)
+                    }
+                    if (isFirst && child != this) {
+                        logDebug "parse: replicating switchLevel in parent"
+                        onSwitchLevel(value)
+                    }
+                } else if (descMap?.attrId == "000F") {
+                    logInfo "Tuya options are (0x${descMap.value})"
+                } else if (descMap?.attrId == "FC02") {
+                    //value = hexStrToUnsignedInt(descMap.value)
+                    logInfo "light type is '${TS110ELightTypeOptions.options[value]}' (0x${descMap.value})"
+                    //device.updateSetting('lightType', [value: value.toString(), type: 'enum'])
+                } else if (descMap?.attrId == "FC03") {
+                    logInfo "minLevel is ${value} (0x${descMap.value})"
+                    //device.updateSetting('minLevel', [value: value, type: 'number'])
+                } else if (descMap?.attrId == "FC04") {
+                    logInfo "maxLevel is ${value} (0x${descMap.value})"
+                    //device.updateSetting('maxLevel', [value: value, type: 'number'])
+                }
+                else {
+                    logDebug "parse: UNPROCESSED attrubute ${descMap?.attrId} switch level cluster 0x0008 command ${descMap?.command}  value raw: (${value})"
+                }
+                break
+            case 0x8021: 
+                logDebug "parse: received bind response, data=${descMap.data} (Sequence Number:${descMap.data[0]}, Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
+                break
+            default :
+                logWarn "parse: UNPROCESSED endpoint=${descMap?.endpoint} cluster=${descMap?.cluster} command=${descMap?.command} attrInt = ${descMap?.attrInt} value= ${descMap?.value} data=${descMap?.data}"
+                break
+        }
+    } 
+    else {
+        throw new Exception("parse() called incorrectly by child")
     }
 }
-
-@Field static final int COMMAND_TIMEOUT = 10            // Command timeout before setting healthState to offline
-@Field static final String UNKNOWN =  'UNKNOWN'
-@Field static final int DEFAULT_MIN_LEVEL = 0
-@Field static final int DEFAULT_MAX_LEVEL = 100
-@Field static final int TS110E_LONSONHO_LEVEL_ATTR = 0xF000        // (61440) 
-@Field static final int TS110E_LONSONHO_BULB_TYPE_ATTR = 0xFC02
-@Field static final int TS110E_LONSONHO_MIN_LEVEL_ATTR = 0xFC03
-@Field static final int TS110E_LONSONHO_MAX_LEVEL_ATTR = 0xFC04
-@Field static final int TS110E_LONSONHO_CUSTOM_LEVEL_CMD = 0x00F0
-
-@Field static Map HealthcheckIntervalOpts = [
-    defaultValue: 10,
-    options: [ 10: 'Every 10 Mins', 15: 'Every 15 Mins', 30: 'Every 30 Mins', 45: 'Every 45 Mins', '59': 'Every Hour', '00': 'Disabled' ]
-]
-@Field static final Map TS110ESwitchTypeOptions = [           // 0xFC00 (64512)
-    defaultValue: 0,
-    options     : [0: 'momentary', 1: 'toggle', 2: 'state']
-]
-@Field static final Map TS110ELightTypeOptions = [            // 0xFC02 (64514), type: 0x20
-    defaultValue: 0,
-    options     : [0: 'led', 1: 'incandescent', 2: 'halogen']
-]
-@Field static final int TS110E_MIN_BRIGHTNESS = 0xFC03        // (64515)       // TODO: 0, 1000 -> 1, 255,  type: 0x21 Check !!!   
-@Field static final int TS110E_MAX_BRIGHTNESS = 0xFC04        // (64516)       // TODO: 0, 1000 -> 1, 255,  type: 0x21 -  Check !!!   
-// Girier TS110E may not support power-on-behavour?  https://github.com/Koenkk/zigbee2mqtt/issues/15902#issuecomment-1382848150     https://github.com/Koenkk/zigbee2mqtt/issues/16804 
 
 
 
@@ -397,7 +534,7 @@ def createChildDevices() {
                 deleteChildDevice(dni)    
             }
             else {
-                logDebug "createChildDevices: child device ${i} DNI was not found!"
+                logWarn "createChildDevices: child device ${i} DNI was not found!"
             }
         }
     }
@@ -434,7 +571,7 @@ def listenChildDevices() {
     if (isTS0601()) {
         return null
     }
-    logDebug "listenChildDevices: getChildEndpointIds() = ${getChildEndpointIds()} size=${getChildEndpointIds().size()}"
+    logTrace "listenChildDevices: getChildEndpointIds() = ${getChildEndpointIds()} size=${getChildEndpointIds().size()}"
     getChildEndpointIds().each{ endpointId ->
         //log.trace "endpointId = ${endpointId}"
         if (endpointId != null && endpointId != 0 && endpointId != 0xF2) {
@@ -448,7 +585,7 @@ def listenChildDevices() {
             ] + cmdRefresh(endpointIdToChildDni(endpointId))
         }
     }
-    logDebug "listenChildDevices: returning binding and reporting configuration commands: ${cmds}"
+    logTrace "listenChildDevices: returning binding and reporting configuration commands: ${cmds}"
     return cmds
 }
 
@@ -528,7 +665,7 @@ def off() {
 // sends Zigbee commands to toggle the switch
 def toggle() {
     scheduleCommandTimeoutCheck()
-    logDebug("toggle: ... getParent()=${getParent()}")
+    logTrace "toggle: ... getParent()=${getParent()}"
     if (isParent()) {
         sendZigbeeCommands(cmdSwitchToggle(indexToChildDni(0)))
     } else {
@@ -612,7 +749,7 @@ def cmdSwitchToggle(String childDni) {
 def cmdSwitch(String childDni, onOff) {
     ArrayList<String> cmds = []
     def endpointId = childDniToEndpointId(childDni)
-    logDebug "cmdSwitch: childDni=${childDni} onOff=${onOff} endpointId=${endpointId}"
+    logTrace "cmdSwitch: childDni=${childDni} onOff=${onOff} endpointId=${endpointId}"
     onOff = onOff ? "1" : "0"
     
     if (isTS0601()) {
@@ -620,11 +757,11 @@ def cmdSwitch(String childDni, onOff) {
         def cmd = childDni[-2..-1]
         def dpCommand = cmd == "01" ? "01" : cmd == "02" ? "07" : cmd == "03" ? "0F" : null
         cmds = sendTuyaCommand(dpCommand, DP_TYPE_BOOL, dpValHex)       
-        logDebug "cmdSwitch: sending cmdSwitch command=${dpCommand} value=${onOff} ($dpValHex) cmds=${cmds}"
+        logTrace "cmdSwitch: sending cmdSwitch command=${dpCommand} value=${onOff} ($dpValHex) cmds=${cmds}"
     }
     else {
         cmds = ["he cmd 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 ${onOff} {}"]
-        logDebug "cmdSwitch: sending cmdSwitch endpointId=${endpointId} value=${onOff} cmds=${cmds}"
+        logTrace "cmdSwitch: sending cmdSwitch endpointId=${endpointId} value=${onOff} cmds=${cmds}"
     }
    return cmds
 }
@@ -638,7 +775,7 @@ def cmdSetLevel(String childDni, value, duration) {
 
     duration = (duration * 10).toInteger()
     def child = getChildByEndpointId(endpointId)
-    logDebug "cmdSetLevel: child=${child} childDni=${childDni} value=${value} duration=${duration}"
+    logTrace "cmdSetLevel: child=${child} childDni=${childDni} value=${value} duration=${duration}"
     
     ArrayList<String> cmdsTuya = []
     ArrayList<String> cmdTS011 = []
@@ -699,169 +836,12 @@ Parent only code
 def doActions(List<String> cmds) {
     if (isParent()) {
         sendZigbeeCommands( cmds )
-/*        
-        hubitat.device.HubMultiAction allActions = new hubitat.device.HubMultiAction()
-        
-        cmds.each { it ->
-            if(it.startsWith('delay') == true) {
-                allActions.add(new hubitat.device.HubAction(it, hubitat.device.Protocol.DELAY))
-            } else {
-                allActions.add(new hubitat.device.HubAction(it, hubitat.device.Protocol.ZIGBEE))
-            }
-        }
-        sendHubCommand(allActions)
-*/
         logDebug "doActions: Sending actions: ${cmds}"
     } else {
         throw new Exception("doActions() called incorrectly by child")
     }
 }
 
-
-def parse(String description) {
-    checkDriverVersion()
-    sendHealthStatusEvent('online')
-    unschedule('deviceCommandTimeout')
-    logDebug "parse: received raw description: ${description}"
-
-    if (isParent()) {
-        def descMap = [:]
-        try {
-            descMap = zigbee.parseDescriptionAsMap(description)
-        }
-        catch (e) {
-            logWarn "exception ${e} caught while parsing description:  ${description}"
-        }
-        logDebug "parse: received descMap: ${descMap}"
-        if (description.startsWith("catchall")) {
-            logDebug "parse: catchall clusterId=${descMap?.clusterId} command=${descMap?.command} data=${descMap?.data}"
-            if (descMap?.clusterId == "EF00") {
-                return parseTuyaCluster(descMap)
-            }
-            /*
-            else {
-                logWarn "Ignored non-Tuya cluster catchall clusterId=${descMap?.clusterId} command=${descMap?.command} data=${descMap?.data}"
-                return null
-            }
-*/
-        }
-        //
-        Integer value = 0
-        if (descMap?.value != null && descMap?.encoding != "42") {
-            try {
-                value = Integer.parseInt(descMap.value, 16)
-            }
-            catch (e) {
-                logWarn "exception ${e} caught while converting ${descMap?.value} to integer, encoding is ${descMap?.encoding}"
-            }
-        }
-        def child = this
-        def isFirst = true
-        if (descMap?.endpoint != null) {
-            child = getChildByEndpointId(descMap.endpoint)
-            isFirst = 0 == endpointIdToIndex(descMap.endpoint)
-        }
-        if (descMap.data != null && descMap.data?.size()>=3 && descMap.data[2] == "86" && descMap.command == "01") {
-            logDebug "Read attribute response: unsupported Attributte ${descMap.data[1] + descMap.data[0]} cluster ${descMap.clusterId}"
-            return
-        }
-        switch (descMap.clusterInt) {
-            case 0x0000: // basic cluster
-                parseBasicCluster( descMap )
-                break
-            case 0x0006: // switch state
-                logDebug "parse: on/off cluster 0x0006 command ${descMap?.command} attribute ${escMap?.attrId} value ${value}"
-                if (descMap?.command == "07" && descMap?.data.size() >= 1) {
-                    logDebug "parse: received Configure Reporting Response for cluster:${descMap.clusterInt} attribute ${escMap?.attrId}, data=${descMap.data} (Status: ${descMap.data[0]=="00" ? 'Success' : '<b>Failure</b>'})"
-                    break
-                }
-                if (descMap?.command == "0B" && descMap?.data.size() >= 2) {
-                    String clusterCmd = descMap.data[0]
-                    def status = descMap.data[1]
-                    logDebug "parse: received ZCL Command Response for cluster ${descMap.clusterInt} command ${descMap?.command} attribute ${escMap?.attrId}, data=${descMap.data} (Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
-                    break
-                }
-                if (descMap?.attrId == "0000") {
-                    if (isGirier() && descMap?.command == "01") {
-                        logDebug "parse: IGNORING command Response for cluster ${descMap.clusterInt} command ${descMap?.command} attribute ${escMap?.attrId}"
-                    }
-                    else {
-                        child?.onSwitchState(value)
-                        if (isFirst && child != this) {
-                            logDebug "parse: replicating switchState in parent"
-                            onSwitchState(value)
-                        } 
-                        else {
-                            logDebug "parse: isFirst=${isFirst} this=${this} child=${child} value=${value}"
-                        }
-                    }
-                }
-                else {
-                    logDebug "parse: unsupported attribute ${descMap?.attrId} cluster ${descMap.clusterId} command ${descMap?.command}, data=${descMap.data}"
-                }
-                break
-            case 0x0008: // switch level state
-                if (descMap?.command == "07" && descMap?.data.size() >= 1) {
-                    logDebug "parse: received Configure Reporting Response for cluster:${descMap.clusterId} , data=${descMap.data} (Status: ${descMap.data[0]=="00" ? 'Success' : '<b>Failure</b>'})"
-                    break
-                }
-                if (descMap?.command == "0B" && descMap?.data.size() >= 2) {
-                    String clusterCmd = descMap.data[0]
-                    def status = descMap.data[1]
-                    logDebug "parse: received ZCL Command Response for cluster ${descMap.clusterId} command ${descMap?.command}, data=${descMap.data} (Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
-                    break
-                }
-                logDebug "parse: switch level cluster 0x0008 endpoint ${descMap?.endpoint} command ${descMap?.command} attrId ${descMap?.attrId} value raw ${value})"
-                if (descMap?.attrId == "0000" || descMap?.attrId == "F000") {
-                    if (isTuyaBulb() && descMap?.attrId == "0000") {
-                        logDebug "parse: Tuya Bulb: child.onSwitchLevel value=${value} child=${child}"
-                    }                    
-                    else if (isLonsonho() && descMap?.attrId == "F000") {
-                        value = (value / 10) as int
-                    }
-                    else if (descMap?.attrId == "0000") {
-                        logDebug "parse: Tuya/Girier/OEM: child.onSwitchLevel value=${value} child=${child}"
-                    }
-                    else {
-                        logDebug "parse: SKIPPING  attrId ${descMap?.attrId} value raw ${value} !"        // TODO !!
-                        break
-                    }
-                    if (child != null) {
-                        child?.onSwitchLevel((value) as int)
-                    }
-                    if (isFirst && child != this) {
-                        logDebug "parse: replicating switchLevel in parent"
-                        onSwitchLevel(value)
-                    }
-                } else if (descMap?.attrId == "000F") {
-                    logInfo "Tuya options are (0x${descMap.value})"
-                } else if (descMap?.attrId == "FC02") {
-                    //value = hexStrToUnsignedInt(descMap.value)
-                    logInfo "light type is '${TS110ELightTypeOptions.options[value]}' (0x${descMap.value})"
-                    //device.updateSetting('lightType', [value: value.toString(), type: 'enum'])
-                } else if (descMap?.attrId == "FC03") {
-                    logInfo "minLevel is ${value} (0x${descMap.value})"
-                    //device.updateSetting('minLevel', [value: value, type: 'number'])
-                } else if (descMap?.attrId == "FC04") {
-                    logInfo "maxLevel is ${value} (0x${descMap.value})"
-                    //device.updateSetting('maxLevel', [value: value, type: 'number'])
-                }
-                else {
-                    logDebug "parse: UNPROCESSED attrubute ${descMap?.attrId} switch level cluster 0x0008 command ${descMap?.command}  value raw: (${value})"
-                }
-                break
-            case 0x8021: 
-                logDebug "parse: received bind response, data=${descMap.data} (Sequence Number:${descMap.data[0]}, Status: ${descMap.data[1]=="00" ? 'Success' : '<b>Failure</b>'})"
-                break
-            default :
-                logWarn "parse: UNPROCESSED endpoint=${descMap?.endpoint} cluster=${descMap?.cluster} command=${descMap?.command} attrInt = ${descMap?.attrInt} value= ${descMap?.value} data=${descMap?.data}"
-                break
-        }
-    } 
-    else {
-        throw new Exception("parse() called incorrectly by child")
-    }
-}
 
 /*
 -----------------------------------------------------------------------------
@@ -1101,14 +1081,14 @@ Child only code
 
 def onSwitchState(value) {
     def valueText = value == 0 ? "off" : "on"
-    logInfo "${device.displayName} set ${valueText}"
+    logInfo "set ${valueText}"
     sendEvent(name:"switch", value: valueText, descriptionText: "${device.displayName} set ${valueText}", unit: null)
 }
 
 def onSwitchLevel(value) {
     def level = valueToLevel(safeToInt(value))    // TODO - null pointer exception! https://community.hubitat.com/t/girier-tuya-zigbee-3-0-dimmable-1-gang-switch-w-neutral/112620/10?u=kkossev 
     logDebug "onSwitchLevel: Value=${value} level=${level} (value=${value})"
-    logInfo "${device.displayName} set level ${level} %"
+    logInfo "set level ${level} %"
     sendEvent(name:"level", value: level, descriptionText:"${device.displayName} set ${level}%", unit: "%")
 }
     
@@ -1334,6 +1314,8 @@ void initializeVars( boolean fullInit = false ) {
         setDeviceNameAndProfile()
     }
     if (fullInit == true || settings.logEnable == null) device.updateSetting("logEnable", DEFAULT_DEBUG_OPT)
+    if (fullInit == true || settings.traceEnable == null) device.updateSetting("traceEnable", false)
+    
     if (fullInit == true || settings.txtEnable == null) device.updateSetting("txtEnable", true)
     if (fullInit == true || settings?.minLevel == null) device.updateSetting("minLevel", [value:DEFAULT_MIN_LEVEL, type:"number"]) 
     if (fullInit == true || settings?.maxLevel == null) device.updateSetting("maxLevel", [value:DEFAULT_MAX_LEVEL, type:"number"]) 
@@ -1345,7 +1327,7 @@ def updated() {
     checkDriverVersion()
     
     if (settings?.logEnable) {
-        logDebug settings
+        logTrace settings
         runIn(86400, logsOff)
     }    
 
@@ -1367,7 +1349,6 @@ def updated() {
     else {
         logDebug "forcedProfile is not set"
     }
-            
     
     //
     if (isTS0601()) {
@@ -1411,7 +1392,8 @@ def updated() {
             allActions.add(new hubitat.device.HubAction(it, hubitat.device.Protocol.ZIGBEE))
         }
         sendHubCommand(allActions)        
-    }
+    } // TS0601 only
+    
     if (isParent()) {
         logDebug "updated parent->child"
         getChildByEndpointId(indexToEndpointId(0))?.onParentSettingsChange(settings)
@@ -1427,13 +1409,6 @@ def updated() {
 def initialized() {
     logDebug "<b>initialized()</b> ... ${getDeviceInfo()}"
     ArrayList<String> cmds = []
-    /*
-    if (debug == true && deviceSimulation == true) {
-        device.updateDataValue("model", simulatedModel)
-        device.updateDataValue("manufacturer", simulatedManufacturer)
-        logDebug "device simulation: ${simulatedModel} ${simulatedManufacturer}"
-    }
-    */
     unschedule() // added 12/10/2022
     logDebug "initialized() device.getData() = ${device.getData()}"
     
@@ -1484,6 +1459,12 @@ def intTo8bitUnsignedHex(value) {
 Logging output
 -----------------------------------------------------------------------------
 */
+
+def logTrace(msg) {
+    if (settings.traceEnable) {
+        log.trace "${device.displayName} " + msg
+    }
+}
 
 def logDebug(msg) {
     if (settings.debugEnable) {
@@ -1549,7 +1530,7 @@ Double safeToDouble(val, Double defaultVal=0.0) {
 }
 
 void sendZigbeeCommands(ArrayList<String> cmd) {
-    logDebug "${device.displayName} sendZigbeeCommands(cmd=$cmd)"
+    logDebug "sendZigbeeCommands: ${cmd}"
     hubitat.device.HubMultiAction allActions = new hubitat.device.HubMultiAction()
     cmd.each {
             allActions.add(new hubitat.device.HubAction(it, hubitat.device.Protocol.ZIGBEE))
@@ -1673,12 +1654,13 @@ List<String> ping() {
 
 void logsOff() {
     logInfo 'debug logging disabled...'
-    device.updateSetting('logEnable', [value: 'false', type: 'bool'])
+    device.updateSetting('debugEnable', [value: 'false', type: 'bool'])
+    device.updateSetting('traceEnable', [value: 'false', type: 'bool'])
 }
 
 //----------------------------
 
-def zTest( dpCommand, dpValue, dpTypeString ) {
+def tuyaTest( dpCommand, dpValue, dpTypeString ) {
     ArrayList<String> cmds = []
     def dpType   = dpTypeString=="DP_TYPE_VALUE" ? DP_TYPE_VALUE : dpTypeString=="DP_TYPE_BOOL" ? DP_TYPE_BOOL : dpTypeString=="DP_TYPE_ENUM" ? DP_TYPE_ENUM : null
     def dpValHex = dpTypeString=="DP_TYPE_VALUE" ? zigbee.convertToHexString(dpValue as int, 8) : dpValue
