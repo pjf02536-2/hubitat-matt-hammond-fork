@@ -57,9 +57,12 @@ ver 0.4.1  2023/03/31 kkossev      - added new TS110E_GIRIER_DIMMER product prof
 ver 0.4.2  2023/04/10 kkossev      - added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device; all Current States are cleared on Initialize; Lonsonho brightness control; Hubitat 'F2 bug' patched; Lonsonho change level uses cluster 0x0008
 ver 0.4.3  2023/04/12 kkossev      - numEps bug fix; generic ZCL dimmer support; patch for Girier firmware bug on Refresh command 01 reporting off state; DeviceWrapper fixes; added TS0505B_TUYA_BULB; bugfix when endpointId is different than 01
 ver 0.4.4  2023/04/23 kkossev      - added capability 'Health Check'; Lonsonho dimmers setLevel working now (parent device) !
+ver 0.4.5  2023/05/17 kkossev      - (dev.branch) removed obsolete deviceSimulation options; added _TZ3210_ngqk6jia fingerprint1-gang (not fully working yet) 
+ver 0.4.6  2023/06/11 kkossev      - (dev.branch) child devices creation critical bug fix.
 *
+*                                   TODO: check _TZ3210_ngqk6jia - there was 2 gang same manufacturer?
+*                                   TODO: add Yes/No selection to Initialize() button
 *                                   TODO: TS0601 second/third gang is not working?
-*                                   TODO: remove obsolete deviceSumulation options;
 *                                   TODO: TS110E_GIRIER_DIMMER TS011E power_on_behavior_1, TS110E_switch_type ['toggle', 'state', 'momentary']) (TS110E_options - needsMagic())
 *                                   TODO: Tuya Fan Switch support
 *                                   TODO: add TS110E 'light_type', 'switch_type'
@@ -67,16 +70,16 @@ ver 0.4.4  2023/04/23 kkossev      - added capability 'Health Check'; Lonsonho d
 *
 */
 
-def version() { "0.4.4" }
-def timeStamp() {"2023/04/23 10:15 PM"}
+def version() { "0.4.6" }
+def timeStamp() {"2023/06/11 10:26 AM"}
 
 import groovy.transform.Field
 
 @Field static final Boolean _DEBUG = false
 @Field static final Boolean DEFAULT_DEBUG_OPT = true
-@Field static final Boolean deviceSimulation = false
-@Field static final String  simulatedModel = "TS110E"
-@Field static final String  simulatedManufacturer = "_TZ3210_k1msuvg6"
+//@Field static final Boolean deviceSimulation = false
+//@Field static final String  simulatedModel = "TS110E"
+//@Field static final String  simulatedManufacturer = "_TZ3210_k1msuvg6"
 
 @Field static def modelConfigs = [
     "_TYZB01_v8gtiaed": [ numEps: 2, model: "TS110F", inClusters: "0000,0004,0005,0006,0008",     joinName: "Tuya Zigbee 2-Gang Dimmer module" ],                // '2 gang smart dimmer switch module with neutral'
@@ -105,7 +108,8 @@ import groovy.transform.Field
     "_TZ3210_k1msuvg6": [ numEps: 1, model: "TS110E", inClusters: "0004,0005,0003,0006,0008,EF00,0000", joinName: "Girier Zigbee 1-Gang Dimmer module"],           // https://community.hubitat.com/t/girier-tuya-zigbee-3-0-light-switch-module-smart-diy-breaker-1-2-3-4-gang-supports-2-way-control/104546/36?u=kkossev
     "GLEDOPTO":         [ numEps: 1, model: "GL-SD-001", inClusters: "0000,0003,0004,0005,0006,0008,1000", joinName: "Gledopto Triac Dimmer"],                     //
     "_TZ3210_pagajpog": [ numEps: 2, model: "TS110E", inClusters: "0005,0004,0006,0008,E001,0000", joinName: "Lonsonho Tuya Smart Zigbee Dimmer"],                 // https://community.hubitat.com/t/release-tuya-lonsonho-1-gang-and-2-gang-zigbee-dimmer-module-driver/60372/76?u=kkossev
-    "_TZ3210_4ubylghk": [ numEps: 2, model: "TS110E", inClusters: "0005,0004,0006,0008,E001,0000", joinName: "Lonsonho Tuya Smart Zigbee Dimmer"]                  // https://community.hubitat.com/t/driver-support-for-tuya-dimmer-module-model-ts110e-manufacturer-tz3210-4ubylghk/116077?u=kkossev
+    "_TZ3210_4ubylghk": [ numEps: 2, model: "TS110E", inClusters: "0005,0004,0006,0008,E001,0000", joinName: "Lonsonho Tuya Smart Zigbee Dimmer"],                 // https://community.hubitat.com/t/driver-support-for-tuya-dimmer-module-model-ts110e-manufacturer-tz3210-4ubylghk/116077?u=kkossev
+    "_TZ3210_ngqk6jia": [ numEps: 1, model: "TS110E", inClusters: "0003,0005,0004,0006,0008,E001,1000,0000", joinName: "Tuya Smart Zigbee Dimmer"]                 // KK
 
 ]
 
@@ -375,7 +379,7 @@ def createChildDevices() {
         numEps = 0
         logDebug "createChildDevices: single channel dimmer, no child devices are needed"
     } else {
-        logDebug "createChildDevices: about to delete the child devices:  ${numEps} expected , found ${getChildDevices().size()}"
+        logDebug "createChildDevices: about to delete any existing child devices:  ${numEps} expected , found ${getChildDevices().size()}"
     }
 
     def index = getChildDevices().size()
@@ -1135,9 +1139,9 @@ def endpointIdToChildDni(endpointId) {
 
 def indexToChildDni(i) {
     //log.trace "indexToChildDni(${i}): ${endpointIdToChildDni(indexToEndpointId(i))}"
-    if (i==0) {
+    if (false /*i==0*/) {
         //log.trace "indexToChildDni(${i}): ${getDestinationEP()}"
-        return getDestinationEP()    // 04/11/2023
+        return getDestinationEP()    // 04/11/2023    !!!!!!!!!!!! BUG !!!!!!!!!!!!
     }
     else {
         return endpointIdToChildDni(indexToEndpointId(i))
@@ -1268,7 +1272,7 @@ def getDeviceInfo() {
 
 //  will be the first function called just once when paired as a new device. Not called again on consequent re-pairings !
 def installed() {
-    logDebug "<b>installed()</b> ... ${getDeviceInfo()}"
+    logDebug "<b>installed()</b> ... model=${device.getDataValue('model')} manufacturer=${device.getDataValue('manufacturer')}"
     sendEvent(name: 'level', value: 0, unit: '%')
     sendEvent(name: 'switch', value: 'off')
     sendEvent(name: 'healthStatus', value: 'unknown')
@@ -1276,7 +1280,7 @@ def installed() {
 
 // called every time the device is paired to the HUB (both as new or as an existing device)
 def configure() {
-    logDebug "<b>configure()</b> ... ${getDeviceInfo()}"
+    logDebug "<b>configure()</b> ..."
     setDestinationEP()
     checkDriverVersion()
     if (state.deviceProfile == null) {
@@ -1416,15 +1420,17 @@ def updated() {
     //return initialized()
 }
 
-// custom initialization method, called from installed()
+// custom initialization method, called from configure()
 def initialized() {
     logDebug "<b>initialized()</b> ... ${getDeviceInfo()}"
     ArrayList<String> cmds = []
+    /*
     if (debug == true && deviceSimulation == true) {
         device.updateDataValue("model", simulatedModel)
         device.updateDataValue("manufacturer", simulatedManufacturer)
         logDebug "device simulation: ${simulatedModel} ${simulatedManufacturer}"
     }
+    */
     unschedule() // added 12/10/2022
     logDebug "initialized() device.getData() = ${device.getData()}"
     
