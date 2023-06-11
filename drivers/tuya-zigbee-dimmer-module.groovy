@@ -59,7 +59,7 @@ ver 0.4.3  2023/04/12 kkossev      - numEps bug fix; generic ZCL dimmer support;
 ver 0.4.4  2023/04/23 kkossev      - added capability 'Health Check'; Lonsonho dimmers setLevel working now (parent device) !
 ver 0.4.5  2023/05/17 kkossev      - removed obsolete deviceSimulation options; added _TZ3210_ngqk6jia fingerprint1-gang (not fully working yet) 
 ver 0.4.6  2023/06/11 kkossev      - child devices creation critical bug fix.
-ver 0.5.0  2023/06/11 kkossev      - (dev.branch) code cleanup; more bug fixes; added trace logging; fake offline for 2nd gang fixed; 
+ver 0.5.0  2023/06/11 kkossev      - (dev.branch) code cleanup; more bug fixes; added trace logging; fake offline for 2nd gang fixed; temporary disabled the initialize() command
 *
 *                                   TODO: check _TZ3210_ngqk6jia - there was 2 gang same manufacturer?
 *                                   TODO: add Yes/No selection to Initialize() button
@@ -72,7 +72,7 @@ ver 0.5.0  2023/06/11 kkossev      - (dev.branch) code cleanup; more bug fixes; 
 */
 
 def version() { "0.5.0" }
-def timeStamp() {"2023/06/11 11:14 PM"}
+def timeStamp() {"2023/06/11 11:59 PM"}
 
 import groovy.transform.Field
 
@@ -98,7 +98,7 @@ metadata {
         attribute 'healthStatus', 'enum', [ 'unknown', 'offline', 'online' ]
         
         command "toggle"
-        command "initialize", [[name: "Initialize the sensor after switching drivers.  \n\r   ***** Will load device default values! *****" ]]
+        //command "initialize", [[name: "Initialize the sensor after switching drivers.  \n\r   ***** Will load device default values! *****" ]]
         
         if (_DEBUG == true) {
             command "tuyaTest", [
@@ -1259,6 +1259,9 @@ def installed() {
     sendEvent(name: 'level', value: 0, unit: '%')
     sendEvent(name: 'switch', value: 'off')
     sendEvent(name: 'healthStatus', value: 'unknown')
+    initializeVars( fullInit = true )
+    // TuyaBlackMagic + create child devices
+    initialized()    
 }
 
 // called every time the device is paired to the HUB (both as new or as an existing device)
@@ -1272,8 +1275,6 @@ def configure() {
     else {
         logInfo "the selected ${state.deviceProfile} device profile was not changed!"
     }
-    // TuyaBlackMagic + reate child devices
-    initialized()
     updated()
 }
 
@@ -1281,6 +1282,8 @@ def configure() {
 def initialize() {
     log.info "<b>initialize()</b> ... ${getDeviceInfo()}"
     initializeVars( fullInit = true )
+    // TuyaBlackMagic + create child devices
+    initialized()
     configure()
 }
 
