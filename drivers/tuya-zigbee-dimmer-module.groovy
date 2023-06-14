@@ -59,13 +59,11 @@ ver 0.4.3  2023/04/12 kkossev      - numEps bug fix; generic ZCL dimmer support;
 ver 0.4.4  2023/04/23 kkossev      - added capability 'Health Check'; Lonsonho dimmers setLevel working now (parent device) !
 ver 0.4.5  2023/05/17 kkossev      - removed obsolete deviceSimulation options; added _TZ3210_ngqk6jia fingerprint1-gang (not fully working yet) 
 ver 0.4.6  2023/06/11 kkossev      - child devices creation critical bug fix.
-ver 0.5.0  2023/06/12 kkossev      - (dev.branch) code cleanup; more bug fixes; added trace logging; fake offline for 2nd gang fixed; temporary disabled the initialize() command; changed _TZ3210_ngqk6jia to Lonsonho TS011E group
+ver 0.5.0  2023/06/14 kkossev      - (dev.branch) code cleanup; more bug fixes; added trace logging; fixed healthStatus offline for TS0601 and Lonsonho 2nd gang; temporary disabled the initialize() command; changed _TZ3210_ngqk6jia to Lonsonho TS011E group
 *
-*                                   TODO: TS0601 3 gangs - the first child device is not working.
-*                                   TODO: TS0601 3 gangs - fake offline 
+*                                   TODO: TS0601 3 gangs - toggle() is not working for the 2nd and teh 3rd gang
 *                                   TODO: check _TZ3210_ngqk6jia - there was 2 gang same manufacturer?
 *                                   TODO: add Yes/No selection to Initialize() button
-*                                   TODO: TS0601 second/third gang is not working?
 *                                   TODO: TS110E_GIRIER_DIMMER TS011E power_on_behavior_1, TS110E_switch_type ['toggle', 'state', 'momentary']) (TS110E_options - needsMagic())
 *                                   TODO: Tuya Fan Switch support
 *                                   TODO: add TS110E 'light_type', 'switch_type'
@@ -74,7 +72,7 @@ ver 0.5.0  2023/06/12 kkossev      - (dev.branch) code cleanup; more bug fixes; 
 */
 
 def version() { "0.5.0" }
-def timeStamp() {"2023/06/12 8:27 PM"}
+def timeStamp() {"2023/06/14 9:19 PM"}
 
 import groovy.transform.Field
 
@@ -110,7 +108,7 @@ metadata {
             ]
             command "testRefresh", [[name: "see the live logs" ]]
             command "test", [[name: "test", type: "STRING", description: "test", constraints: ["STRING"]]]
-            command "testX"
+            command "testX", [[name: "testX", type: "STRING", description: "testX", constraints: ["STRING"]]]
         }
         
         modelConfigs.each{ data ->
@@ -379,11 +377,13 @@ void parse(String description) {
             logTrace "parse: catchall clusterId=${descMap?.clusterId} command=${descMap?.command} data=${descMap?.data}"
             if (descMap?.clusterId == "EF00") {
                 parseTuyaCluster(descMap)
-                return
             }
             else {
                 logWarn "uprocessed catchall:  ${description}"
             }
+            sendHealthStatusEventAll('online')
+            unschedule('deviceCommandTimeout')            
+            return
         }
         //
         Integer value = 0
@@ -399,11 +399,11 @@ void parse(String description) {
         def isFirst = true
         if (descMap?.endpoint != null) {
             child = getChildByEndpointId(descMap.endpoint)
-            isFirst = 0 == endpointIdToIndex(descMap.endpoint)
+            isFirst = (endpointIdToIndex(descMap.endpoint) == 0)
         }
         //
-        child?.sendHealthStatusEvent('online')
-        child?.unschedule('deviceCommandTimeout')
+        sendHealthStatusEventAll('online')
+        unschedule('deviceCommandTimeout')
         //
         if (descMap.data != null && descMap.data?.size()>=3 && descMap.data[2] == "86" && descMap.command == "01") {
             logDebug "Read attribute response: unsupported Attributte ${descMap.data[1] + descMap.data[0]} cluster ${descMap.clusterId}"
@@ -634,7 +634,7 @@ if parent, then act on endpoint 1
 
 // sends Zigbee commands to refresh the switch and the level
 def refresh() {
-    scheduleCommandTimeoutCheck()
+    getDW().scheduleCommandTimeoutCheck()
     if (isParent()) {
         logDebug "refresh: parent ${indexToChildDni(0)}"
         ArrayList<String> cmds = cmdRefresh(indexToChildDni(0))
@@ -647,7 +647,7 @@ def refresh() {
 
 // sends Zigbee commands to turn the switch on
 def on() {
-    scheduleCommandTimeoutCheck()
+    getDW().scheduleCommandTimeoutCheck()
     if (isParent()) {
         sendZigbeeCommands(cmdSwitch(indexToChildDni(0), 1))
     } else {
@@ -657,7 +657,7 @@ def on() {
 
 // sends Zigbee commands to turn the switch off
 def off() {
-    scheduleCommandTimeoutCheck()
+    getDW().scheduleCommandTimeoutCheck()
     if (isParent()) {
         sendZigbeeCommands(cmdSwitch(indexToChildDni(0), 0))
     } else {
@@ -667,7 +667,7 @@ def off() {
 
 // sends Zigbee commands to toggle the switch
 def toggle() {
-    scheduleCommandTimeoutCheck()
+    getDW().scheduleCommandTimeoutCheck()
     logTrace "toggle: ... getParent()=${getParent()}"
     if (isParent()) {
         sendZigbeeCommands(cmdSwitchToggle(indexToChildDni(0)))
@@ -678,7 +678,7 @@ def toggle() {
 
 // sends Zigbee commands to set level
 def setLevel(level, duration=0) {
-    scheduleCommandTimeoutCheck()
+    getDW().scheduleCommandTimeoutCheck()
     if (settings.autoRefresh == true) {
         runIn(1, 'refresh')
     }
@@ -691,6 +691,18 @@ def setLevel(level, duration=0) {
     }
 }
 
+// sends Zigbee commands to ping the device
+def ping() {
+    getDW().scheduleCommandTimeoutCheck()
+    if (isParent()) {
+        logDebug "ping: (cmd) parent ${indexToChildDni(0)}"
+        ArrayList<String> cmds = cmdPing(indexToChildDni(0))
+        sendZigbeeCommands(cmds)
+    } else {
+        logDebug "ping: (doActions) child ${device.deviceNetworkId}"
+        parent?.doActions( parent?.cmdPing(device.deviceNetworkId) )
+    }
+}
 
 
 /*
@@ -828,6 +840,16 @@ def cmdSetLevel(String childDni, value, duration) {
     logDebug "cmdSetLevel: sending cmdTS011=${cmdTS011}"
     return cmdTS011
 }
+
+// returns Zigbee commands to ping the device
+def cmdPing(String childDni) {
+    def endpointId = childDniToEndpointId(childDni)
+    if (isTS0601()) endpointId = 1
+    logDebug "cmdPing: (childDni=${childDni} endpointId=${endpointId})  isParent()=${isParent()}"
+    return ["he rattr 0x${device.deviceNetworkId} 0x${endpointId} 0x0000 0x0001 {}", "delay 200",]
+}
+
+
 
 /*
 -----------------------------------------------------------------------------
@@ -1125,13 +1147,7 @@ def endpointIdToChildDni(endpointId) {
 
 def indexToChildDni(i) {
     //log.trace "indexToChildDni(${i}): ${endpointIdToChildDni(indexToEndpointId(i))}"
-    if (false /*i==0*/) {
-        //log.trace "indexToChildDni(${i}): ${getDestinationEP()}"
-        return getDestinationEP()    // 04/11/2023    !!!!!!!!!!!! BUG !!!!!!!!!!!!
-    }
-    else {
-        return endpointIdToChildDni(indexToEndpointId(i))
-    }
+    return endpointIdToChildDni(indexToEndpointId(i))
 }
 
 def childDniToEndpointId(childDni) {
@@ -1143,7 +1159,7 @@ def childDniToEndpointId(childDni) {
             return match[0][2]
         }
     }
-    return getDestinationEP()  //null
+    return null
 }
 
 def childDnisToEndpointIds(List<String> childDnis) {
@@ -1253,7 +1269,7 @@ Standard handlers
 */
 
 def getDeviceInfo() {
-    return "model=${device.getDataValue('model')} manufacturer=${device.getDataValue('manufacturer')} destinationEP=${state.destinationEP ?: UNKNOWN} <b>deviceProfile=${state.deviceProfile ?: UNKNOWN}</b>"
+    return "model=${getDW().device.getDataValue('model')} manufacturer=${getDW().device.getDataValue('manufacturer')} destinationEP=${state.destinationEP ?: UNKNOWN} <b>deviceProfile=${state.deviceProfile ?: UNKNOWN}</b>"
 }
 
 //  will be the first function called just once when paired as a new device. Not called again on consequent re-pairings !
@@ -1330,6 +1346,7 @@ void initializeVars( boolean fullInit = false ) {
 // will be called when user selects Save Preferences
 def updated() {
     logDebug "<b>updated()</b> ... ${getDeviceInfo()}"
+    unschedule()
     checkDriverVersion()
     
     if (settings?.logEnable) {
@@ -1337,11 +1354,17 @@ def updated() {
         runIn(86400, logsOff)
     }    
 
-    int interval = (settings.healthCheckInterval as Integer) ?: 0
-    if (interval > 0) {
-        log.info "scheduling health check every ${interval} minutes"
-        scheduleDeviceHealthCheck(interval)
+    if (isParent()) {
+        int interval = (settings.healthCheckInterval as Integer) ?: 0
+        if (interval > 0) {
+            log.info "scheduling health check every ${interval} minutes"
+            scheduleDeviceHealthCheck(interval)
+        }
     }
+    else {
+        logDebug "skipping the health check for a child device"
+    }
+
       
     // version 0.3.1
     if (settings?.forcedProfile != null) {
@@ -1627,35 +1650,36 @@ def setDeviceNameAndProfile( model=null, manufacturer=null) {
 
 //----------------------------
 
-private void sendHealthStatusEvent(String status) {
+private void sendHealthStatusEventAll(String status) {
+    log.trace "sendHealthStatusEventAll: ${status}   DW=${getDW()}     size = ${getChildDevices().size()}"
+    
     if (device.currentValue('healthStatus') != status) {
         String descriptionText = "healthStatus was set to ${status}"
-        sendEvent(name: 'healthStatus', value: status, descriptionText: descriptionText)
-        logInfo "${descriptionText}"
+    	def cd = getChildDevices()
+        cd.each { child ->
+            log.warn"child=${child}"
+            child?.sendEvent(name: 'healthStatus', value: status, descriptionText: descriptionText)
+            child?.logInfo "${descriptionText}"
+        }   
+        this.sendEvent(name: 'healthStatus', value: status, descriptionText: descriptionText)
+        this.logInfo "${descriptionText}"
     }
 }
 
 private void scheduleCommandTimeoutCheck(int delay = COMMAND_TIMEOUT) {
-    runIn(delay, 'deviceCommandTimeout')
+    logDebug "scheduleCommandTimeoutCheck: delay=${delay} isParent=${isParent()}"
+    runIn(delay, 'deviceCommandTimeout', [overwrite: true, misfire: "ignore"])
 }
 
 
 void deviceCommandTimeout() {
     logWarn 'no response received (device offline?)'
-    sendHealthStatusEvent('offline')
+    sendHealthStatusEventAll('offline')
 }
 
 private void scheduleDeviceHealthCheck(int intervalMins) {
     Random rnd = new Random()
-    schedule("${rnd.nextInt(59)} ${rnd.nextInt(9)}/${intervalMins} * ? * * *", 'ping')
-}
-
-List<String> ping() {
-    logInfo 'ping...' 
-    def ep = safeToInt(getDestinationEP())
-    // Using attribute 0x01 as a simple ping/pong mechanism
-    scheduleCommandTimeoutCheck()
-    return zigbee.readAttribute(zigbee.BASIC_CLUSTER, 0x01, [destEndpoint:ep], 0)
+    getDW().schedule("${rnd.nextInt(59)} ${rnd.nextInt(9)}/${intervalMins} * ? * * *", 'ping')
 }
 
 void logsOff() {
@@ -1749,9 +1773,9 @@ def testRefresh() {
     sendZigbeeCommands(cmds)
 }
 
-def testX() {
-    //log.trace "zigbee.setLevel = ${zigbee.setLevel(999)}"
-    //log.trace "deviceProfilesV2 = ${deviceProfilesV2}"
+def testX( var ) {
+    //installed()
+    sendHealthStatusEventAll(var as String)
 }
 
 // https://developer.tuya.com/en/docs/iot/tuya-smart-dimmer-switch-single-phrase-input-without-neutral-line?id=K9ik6zvokodvn#subtitle-10-Private%20cluster 
