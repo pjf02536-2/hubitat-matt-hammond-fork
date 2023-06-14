@@ -60,6 +60,7 @@ ver 0.4.4  2023/04/23 kkossev      - added capability 'Health Check'; Lonsonho d
 ver 0.4.5  2023/05/17 kkossev      - removed obsolete deviceSimulation options; added _TZ3210_ngqk6jia fingerprint1-gang (not fully working yet) 
 ver 0.4.6  2023/06/11 kkossev      - child devices creation critical bug fix.
 ver 0.5.0  2023/06/14 kkossev      - added trace logging; fixed healthStatus offline for TS0601 and Lonsonho 2nd gang; temporary disabled the initialize() command; changed _TZ3210_ngqk6jia to Lonsonho TS011E group; fixed TS0601 1st gang not working
+ver 0.5.1  2023/06/14 kkossev      - (dev. branch) added TS110E _TZ3210_3mpwqzuu 2 gang;
 *
 *                                   TODO: TS0601 3 gangs - toggle() is not working for the 2nd and teh 3rd gang
 *                                   TODO: check _TZ3210_ngqk6jia - there was 2 gang same manufacturer?
@@ -68,11 +69,13 @@ ver 0.5.0  2023/06/14 kkossev      - added trace logging; fixed healthStatus off
 *                                   TODO: Tuya Fan Switch support
 *                                   TODO: add TS110E 'light_type', 'switch_type'
 *                                   TODO: RTT measurement in the ping command; logsOff() after 24 hours; 
+*                                   TODO: Gledopto:minimumLevel is not processed correcly in the states (setlevel 28 is shown as level 6, if minLevel is set as 29 and maxLevel is set to 85)
+*                                   TODO: add startLevelChange/stopLevelChange (Gledopto)
 *
 */
 
-def version() { "0.5.0" }
-def timeStamp() {"2023/06/14 9:49 PM"}
+def version() { "0.5.1" }
+def timeStamp() {"2023/06/14 10:57 PM"}
 
 import groovy.transform.Field
 
@@ -210,7 +213,9 @@ metadata {
     "GLEDOPTO":         [ numEps: 1, model: "GL-SD-001", inClusters: "0000,0003,0004,0005,0006,0008,1000", joinName: "Gledopto Triac Dimmer"],                     //
     "_TZ3210_pagajpog": [ numEps: 2, model: "TS110E", inClusters: "0005,0004,0006,0008,E001,0000", joinName: "Lonsonho Tuya Smart Zigbee Dimmer"],                 // https://community.hubitat.com/t/release-tuya-lonsonho-1-gang-and-2-gang-zigbee-dimmer-module-driver/60372/76?u=kkossev
     "_TZ3210_4ubylghk": [ numEps: 2, model: "TS110E", inClusters: "0005,0004,0006,0008,E001,0000", joinName: "Lonsonho Tuya Smart Zigbee Dimmer"],                 // https://community.hubitat.com/t/driver-support-for-tuya-dimmer-module-model-ts110e-manufacturer-tz3210-4ubylghk/116077?u=kkossev
-    "_TZ3210_ngqk6jia": [ numEps: 1, model: "TS110E", inClusters: "0003,0005,0004,0006,0008,E001,1000,0000", joinName: "Lonsonho Smart Zigbee Dimmer"]             // KK
+    "_TZ3210_ngqk6jia": [ numEps: 1, model: "TS110E", inClusters: "0003,0005,0004,0006,0008,E001,1000,0000", joinName: "Lonsonho Smart Zigbee Dimmer"],            // KK
+    "_TZ3210_3mpwqzuu": [ numEps: 2, model: "TS110E", inClusters: "0005,0004,0006,0008,E001,0000", joinName: "Tuya Smart Zigbee Dimmer"]                           // https://community.hubitat.com/t/driver-support-for-tuya-dimmer-module-model-ts110e-manufacturer-tz3210-4ubylghk/116077/26?u=kkossev
+    
 
 ]
 
@@ -240,7 +245,8 @@ def config() { return modelConfigs[device.getDataValue("manufacturer")] }
             description   : "TS110E Tuya Dimmers",
             models        : ["TS110E"],
             fingerprints  : [
-                [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZE200_e3oitdyu", deviceJoinName: "Moes ZigBee Dimmer Switch 2CH"]                    // https://community.hubitat.com/t/moes-dimmer-module-2ch/110512 
+                [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZE200_e3oitdyu", deviceJoinName: "Moes ZigBee Dimmer Switch 2CH"],                  // https://community.hubitat.com/t/moes-dimmer-module-2ch/110512 
+                [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0005,0004,0006,0008,EF00,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_3mpwqzuu", deviceJoinName: "Tuya 2-gang Dimmer module"]             // https://community.hubitat.com/t/driver-support-for-tuya-dimmer-module-model-ts110e-manufacturer-tz3210-4ubylghk/116077/26?u=kkossev
             ],
             deviceJoinName: "TS110E Tuya Dimmer",
             capabilities  : ["SwitchLevel": true],
@@ -267,10 +273,10 @@ def config() { return modelConfigs[device.getDataValue("manufacturer")] }
             description   : "TS110E Lonsonho Dimmers",        // https://github.com/zigpy/zha-device-handlers/blob/5bbe4e0c668d826baeed178e4085b98d2a5d1740/zhaquirks/tuya/ts110e.py
             models        : ["TS110F"],
             fingerprints  : [
-                //[numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0005,0004,0006,0008,EF00,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_ngqk6jia", deviceJoinName: "Lonsonho 2-gang Dimmer module"],           // https://www.aliexpress.com/item/4001279149071.html
-                [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0005,0004,0006,0008,E001,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_pagajpog", deviceJoinName: "Lonsonho Tuya Smart Zigbee Dimmer"],       // https://community.hubitat.com/t/release-tuya-lonsonho-1-gang-and-2-gang-zigbee-dimmer-module-driver/60372/76?u=kkossev
+                //[numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0005,0004,0006,0008,EF00,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_ngqk6jia", deviceJoinName: "Lonsonho 2-gang Dimmer module"],          // https://www.aliexpress.com/item/4001279149071.html
+                [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0005,0004,0006,0008,E001,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_pagajpog", deviceJoinName: "Lonsonho Tuya Smart Zigbee Dimmer"],        // https://community.hubitat.com/t/release-tuya-lonsonho-1-gang-and-2-gang-zigbee-dimmer-module-driver/60372/76?u=kkossev
                 [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0005,0004,0006,0008,E001,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_4ubylghk", deviceJoinName: "Lonsonho Tuya Smart Zigbee Dimmer"],        // https://community.hubitat.com/t/driver-support-for-tuya-dimmer-module-model-ts110e-manufacturer-tz3210-4ubylghk/116077?u=kkossev
-                [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0003,0005,0004,0006,0008,E001,1000,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_ngqk6jia",joinName: "Lonsonho Smart Zigbee Dimmer"]          // KK
+                [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0003,0005,0004,0006,0008,E001,1000,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_ngqk6jia",joinName: "Lonsonho Smart Zigbee Dimmer"]           // KK
             ],
             deviceJoinName: "TS110E Lonsonho Dimmer",
             capabilities  : ["SwitchLevel": true],
