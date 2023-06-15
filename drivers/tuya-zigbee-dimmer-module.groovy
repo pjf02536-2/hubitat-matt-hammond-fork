@@ -57,24 +57,23 @@ ver 0.4.1  2023/03/31 kkossev      - added new TS110E_GIRIER_DIMMER product prof
 ver 0.4.2  2023/04/10 kkossev      - added TS110E_LONSONHO_DIMMER; decode correction level/10; fixed exception for non-existent child device; all Current States are cleared on Initialize; Lonsonho brightness control; Hubitat 'F2 bug' patched; Lonsonho change level uses cluster 0x0008
 ver 0.4.3  2023/04/12 kkossev      - numEps bug fix; generic ZCL dimmer support; patch for Girier firmware bug on Refresh command 01 reporting off state; DeviceWrapper fixes; added TS0505B_TUYA_BULB; bugfix when endpointId is different than 01
 ver 0.4.4  2023/04/23 kkossev      - added capability 'Health Check'; Lonsonho dimmers setLevel working now (parent device) !
-ver 0.4.5  2023/05/17 kkossev      - removed obsolete deviceSimulation options; added _TZ3210_ngqk6jia fingerprint1-gang (not fully working yet) 
+ver 0.4.5  2023/05/17 kkossev      - removed obsolete deviceSimulation options; added _TZ3210_ngqk6jia fingerprint1-gang
 ver 0.4.6  2023/06/11 kkossev      - child devices creation critical bug fix.
 ver 0.5.0  2023/06/14 kkossev      - added trace logging; fixed healthStatus offline for TS0601 and Lonsonho 2nd gang; temporary disabled the initialize() command; changed _TZ3210_ngqk6jia to Lonsonho TS011E group; fixed TS0601 1st gang not working
-ver 0.5.1  2023/06/15 kkossev      - (dev. branch) added TS110E _TZ3210_3mpwqzuu 2 gang; fixed minLevel bug scaling
+ver 0.5.1  2023/06/15 kkossev      - (dev. branch) added TS110E _TZ3210_3mpwqzuu 2 gang; fixed minLevel bug scaling; added RTT measurement in the ping command; 
 *
 *                                   TODO: TS0601 3 gangs - toggle() is not working for the 2nd and teh 3rd gang
-*                                   TODO: check _TZ3210_ngqk6jia - there was 2 gang same manufacturer?
 *                                   TODO: Enable the Initialize() button w/  Yes/No selection
 *                                   TODO: TS110E_GIRIER_DIMMER TS011E power_on_behavior_1, TS110E_switch_type ['toggle', 'state', 'momentary']) (TS110E_options - needsMagic())
 *                                   TODO: Tuya Fan Switch support
 *                                   TODO: add TS110E 'light_type', 'switch_type'
-*                                   TODO: RTT measurement in the ping command; 
+*                                   TODO: 
 *                                   TODO: add startLevelChange/stopLevelChange (Gledopto)
 *
 */
 
 def version() { "0.5.1" }
-def timeStamp() {"2023/06/15 8:14 PM"}
+def timeStamp() {"2023/06/15 9:45 PM"}
 
 import groovy.transform.Field
 
@@ -98,6 +97,7 @@ metadata {
         capability 'Health Check'
         
         attribute 'healthStatus', 'enum', [ 'unknown', 'offline', 'online' ]
+        attribute "rtt", "number" 
         
         command "toggle"
         //command "initialize", [[name: "Initialize the sensor after switching drivers.  \n\r   ***** Will load device default values! *****" ]]
@@ -155,7 +155,8 @@ metadata {
 }
 
 @Field static final Boolean DEFAULT_DEBUG_OPT = true
-@Field static final int COMMAND_TIMEOUT = 10            // Command timeout before setting healthState to offline
+@Field static final int COMMAND_TIMEOUT = 10                 // Command timeout before setting healthState to offline
+@Field static final Integer MAX_PING_MILISECONDS = 10000     // rtt more than 10 seconds will be ignored
 @Field static final String UNKNOWN =  'UNKNOWN'
 @Field static final int DEFAULT_MIN_LEVEL = 0
 @Field static final int DEFAULT_MAX_LEVEL = 100
@@ -275,7 +276,6 @@ def config() { return modelConfigs[device.getDataValue("manufacturer")] }
             description   : "TS110E Lonsonho Dimmers",        // https://github.com/zigpy/zha-device-handlers/blob/5bbe4e0c668d826baeed178e4085b98d2a5d1740/zhaquirks/tuya/ts110e.py
             models        : ["TS110F"],
             fingerprints  : [
-                //[numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0005,0004,0006,0008,EF00,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_ngqk6jia", deviceJoinName: "Lonsonho 2-gang Dimmer module"],          // https://www.aliexpress.com/item/4001279149071.html
                 [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0005,0004,0006,0008,E001,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_pagajpog", deviceJoinName: "Lonsonho Tuya Smart Zigbee Dimmer"],        // https://community.hubitat.com/t/release-tuya-lonsonho-1-gang-and-2-gang-zigbee-dimmer-module-driver/60372/76?u=kkossev
                 [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0005,0004,0006,0008,E001,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_4ubylghk", deviceJoinName: "Lonsonho Tuya Smart Zigbee Dimmer"],        // https://community.hubitat.com/t/driver-support-for-tuya-dimmer-module-model-ts110e-manufacturer-tz3210-4ubylghk/116077?u=kkossev
                 [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0003,0005,0004,0006,0008,E001,1000,0000", outClusters:"0019,000A", model:"TS110E", manufacturer:"_TZ3210_ngqk6jia",joinName: "Lonsonho Smart Zigbee Dimmer"]           // KK
@@ -386,6 +386,10 @@ void parse(String description) {
             logTrace "parse: catchall clusterId=${descMap?.clusterId} command=${descMap?.command} data=${descMap?.data}"
             if (descMap?.clusterId == "EF00") {
                 parseTuyaCluster(descMap)
+            }
+            else if(descMap?.clusterId == "0000") {
+                parseBasicCluster(descMap)
+                descMap.remove('additionalAttrs')?.each { final Map map -> parseBasicCluster(descMap + map) }
             }
             else {
                 logWarn "uprocessed catchall:  ${description}"
@@ -516,6 +520,34 @@ void parse(String description) {
     }
 }
 
+/**
+ * Zigbee Basic Cluster Parsing
+ * @param descMap Zigbee message in parsed map format
+ */
+void parseBasicCluster(final Map descMap) {
+    switch (descMap.attrInt as Integer) {
+        case PING_ATTR_ID: // Using 0x01 read as a simple ping/pong mechanism
+            logDebug "Tuya check-in message (attribute ${descMap.attrId} reported: ${descMap.value})"
+            def now = new Date().getTime()
+            if (state.lastTx == null) state.lastTx = [:]
+            def timeRunning = now.toInteger() - (state.lastTx["pingTime"] ?: '0').toInteger()
+            if (timeRunning < MAX_PING_MILISECONDS) {
+                sendRttEvent()
+            }
+            break
+        case FIRMWARE_VERSION_ID:
+            final String version = descMap.value ?: 'unknown'
+            log.info "device firmware version is ${version}"
+            updateDataValue('softwareBuild', version)
+            break
+        default:
+            logWarn "zigbee received unknown Basic cluster attribute 0x${descMap.attrId} (value ${descMap.value})"
+            break
+    }
+}
+
+@Field static final int FIRMWARE_VERSION_ID = 0x4000
+@Field static final int PING_ATTR_ID = 0x01
 
 
 /*
@@ -703,6 +735,7 @@ def setLevel(level, duration=0) {
 // sends Zigbee commands to ping the device
 def ping() {
     getDW().scheduleCommandTimeoutCheck()
+    state.lastTx["pingTime"] = new Date().getTime()
     if (isParent()) {
         logDebug "ping: (cmd) parent ${indexToChildDni(0)}"
         ArrayList<String> cmds = cmdPing(indexToChildDni(0))
@@ -1334,15 +1367,36 @@ def getDestinationEP() {
     return state.destinationEP ?: device.endpointId ?: "01"
 }
 
+def resetStats() {
+//    state.stats = [:]
+//    state.states = [:]
+    state.lastRx = [:]
+    state.lastTx = [:]
+//    state.health = [:]
+//    state.stats["rxCtr"] = 0
+//    state.stats["txCtr"] = 0
+//    state.states["isDigital"] = false
+//    state.states["isRefresh"] = false
+//    state.health["offlineCtr"] = 0
+ //   state.health["checkCtr3"] = 0
+}
+
 void initializeVars( boolean fullInit = false ) {
     log.info "InitializeVars( fullInit = ${fullInit} )..."
     if (fullInit == true) {
         /* settings = [:] */ // exception when copying settings to the child devices! // use clearSetting(key) 
         unschedule()
         state.clear()
+        resetStats()        
         device.deleteCurrentState()
         state.driverVersion = driverVersionAndTimeStamp()
     }
+//    if (state.stats == null)  { state.stats  = [:] }
+//    if (state.states == null) { state.states = [:] }
+    if (state.lastRx == null) { state.lastRx = [:] }
+    if (state.lastTx == null) { state.lastTx = [:] }
+//    if (state.health == null) { state.health = [:] }  
+    
     if (fullInit == true || state.deviceProfile == null) {
         setDeviceNameAndProfile()
     }
@@ -1665,6 +1719,28 @@ def setDeviceNameAndProfile( model=null, manufacturer=null) {
 }
 
 //----------------------------
+
+/**
+ * sends 'rtt'event (after a ping() command)
+ * @param null: calculate the RTT in ms
+ *        value: send the text instead ('timeout', 'n/a', etc..)
+ * @return none
+ */
+void sendRttEvent( String value=null) {
+    def now = new Date().getTime()
+    def timeRunning = now.toInteger() - (state.lastTx["pingTime"] ?: now).toInteger()
+    def descriptionText = "Round-trip time is ${timeRunning} (ms)"
+    if (value == null) {
+        logInfo "${descriptionText}"
+        this.sendEvent(name: "rtt", value: timeRunning, descriptionText: descriptionText, unit: "ms", isDigital: true)    
+    }
+    else {
+        descriptionText = "Round-trip time is ${value}"
+        logInfo "${descriptionText}"
+        this.sendEvent(name: "rtt", value: value, descriptionText: descriptionText, isDigital: true)    
+    }
+}
+
 
 private void sendHealthStatusEventAll(String status) {
     log.trace "sendHealthStatusEventAll: ${status}   DW=${getDW()}     size = ${getChildDevices().size()}"
