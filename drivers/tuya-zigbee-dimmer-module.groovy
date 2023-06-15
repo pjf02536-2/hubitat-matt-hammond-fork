@@ -60,22 +60,21 @@ ver 0.4.4  2023/04/23 kkossev      - added capability 'Health Check'; Lonsonho d
 ver 0.4.5  2023/05/17 kkossev      - removed obsolete deviceSimulation options; added _TZ3210_ngqk6jia fingerprint1-gang (not fully working yet) 
 ver 0.4.6  2023/06/11 kkossev      - child devices creation critical bug fix.
 ver 0.5.0  2023/06/14 kkossev      - added trace logging; fixed healthStatus offline for TS0601 and Lonsonho 2nd gang; temporary disabled the initialize() command; changed _TZ3210_ngqk6jia to Lonsonho TS011E group; fixed TS0601 1st gang not working
-ver 0.5.1  2023/06/14 kkossev      - (dev. branch) added TS110E _TZ3210_3mpwqzuu 2 gang;
+ver 0.5.1  2023/06/15 kkossev      - (dev. branch) added TS110E _TZ3210_3mpwqzuu 2 gang; fixed minLevel bug scaling
 *
 *                                   TODO: TS0601 3 gangs - toggle() is not working for the 2nd and teh 3rd gang
 *                                   TODO: check _TZ3210_ngqk6jia - there was 2 gang same manufacturer?
-*                                   TODO: add Yes/No selection to Initialize() button
+*                                   TODO: Enable the Initialize() button w/  Yes/No selection
 *                                   TODO: TS110E_GIRIER_DIMMER TS011E power_on_behavior_1, TS110E_switch_type ['toggle', 'state', 'momentary']) (TS110E_options - needsMagic())
 *                                   TODO: Tuya Fan Switch support
 *                                   TODO: add TS110E 'light_type', 'switch_type'
-*                                   TODO: RTT measurement in the ping command; logsOff() after 24 hours; 
-*                                   TODO: Gledopto:minimumLevel is not processed correcly in the states (setlevel 28 is shown as level 6, if minLevel is set as 29 and maxLevel is set to 85)
+*                                   TODO: RTT measurement in the ping command; 
 *                                   TODO: add startLevelChange/stopLevelChange (Gledopto)
 *
 */
 
 def version() { "0.5.1" }
-def timeStamp() {"2023/06/14 10:57 PM"}
+def timeStamp() {"2023/06/15 8:14 PM"}
 
 import groovy.transform.Field
 
@@ -192,13 +191,15 @@ metadata {
     "_TZ3000_92chsky7": [ numEps: 2, model: "TS110F", inClusters: "0000,0004,0005,0006,0008",     joinName: "Tuya Zigbee 2-Gang Dimmer module (no-neutral)" ],   // '2 gang smart dimmer switch module without neutral'
     "_TZ3000_7ysdnebc": [ numEps: 2, model: "TS110F", inClusters: "0000,0004,0005,0003,0006,0008",joinName: "Tuya 2CH Zigbee dimmer module" ],
     "_TZE200_vm1gyrso": [ numEps: 3, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 3-Gang Dimmer module" ],    
-    "_TZE200_whpb9yts": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 1-Gang Dimmer module" ],                // 'Zigbee smart dimmer'
-    "_TZE200_ebwgzdqq": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 1-Gang Dimmer module" ],    
-    "_TZE200_9i9dt8is": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 1-Gang Dimmer module" ],    
-    "_TZE200_dfxkcots": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 1-Gang Dimmer module" ],    
+    "_TZE200_whpb9yts": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 1-Gang Dimmer module" ],                // 'Zigbee smart dimmer' Larkkey
+    "_TZE200_ebwgzdqq": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 1-Gang Dimmer module" ],                // Larkkey
+    "_TZE200_9i9dt8is": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 1-Gang Dimmer module" ],                // Earda/Tuya (dimmer) EDM-1ZAA-EU 
+    "_TZE200_dfxkcots": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Zigbee 1-Gang Dimmer module" ],                // Earda/Tuya (dimmer) EDM-1ZAA-EU 
     "gq8b1uv":          [ numEps: 1, model: "gq8b1uv", inClusters: "0000,0004,0005,0006,0008",    joinName: "TUYATEC Zigbee smart dimmer" ],                     //  TUYATEC Zigbee smart dimmer
 //    "_TZ3210_ngqk6jia": [ numEps: 2, model: "TS110E", inClusters: "0005,0004,0006,0008,EF00,0000", joinName: "Lonsonho 2-gang Dimmer module"],                    // https://www.aliexpress.com/item/4001279149071.html
     "_TZ3210_zxbtub8r": [ numEps: 1, model: "TS110E", inClusters: "0004,0005,0003,0006,0008,EF00,0000", joinName: "GIRIER Dimmer module 1 ch."],                  // not tested
+    "_TZ3210_lfbz816s": [ numEps: 1, model: "TS110F", inClusters: "0004,0005,0003,0006,0008,EF00,0000", joinName: "Fantem Dimmer module 1 ch."],                  // not tested     Model ZB006-X manufactured by Fantem
+    "_TZ3210_ebbfkvoy": [ numEps: 1, model: "TS110F", inClusters: "0004,0005,0003,0006,0008,EF00,0000", joinName: "Fantem Dimmer module 1 ch."],                  // not tested     Model ZB006-X manufactured by Fantem
     "_TZE200_w4cryh2i": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Moes Zigbee Rotary/Touch Light Dimmer" ],             // https://community.hubitat.com/t/moes-zigbee-dimmer-touch/101195 
     "_TZE200_ip2akl4w": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Moes Zigbee 1-Gang Dimmer module" ],                  // https://community.hubitat.com/t/tuya-moes-1-2-3-gang-dimmer/104596/5?u=kkossev 
     "_TZE200_1agwnems": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Moes Zigbee 1-Gang Dimmer module" ],                  // not tested
@@ -208,6 +209,7 @@ metadata {
     "_TZE200_drs6j6m5": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Lifud Model LF-AAZ030-0750-42" ],                     // https://community.hubitat.com/t/tuya-moes-1-2-3-gang-dimmer/104596/25?u=kkossev
     "_TZE200_fvldku9h": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Fan Switch" ] ,                                  // https://www.aliexpress.com/item/4001242513879.html
     "_TZE200_r32ctezx": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "Tuya Fan Switch" ],                                   // https://www.aliexpress.us/item/3256804518783061.html https://github.com/Koenkk/zigbee2mqtt/issues/12793
+    "_TZE200_3p5ydos3": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "BSEED Zigbee Dimmer" ],                               // https://www.bseed.com/collections/zigbee-series/products/bseed-eu-russia-new-zigbee-touch-wifi-light-dimmer-smart-switch
     "_TZE200_e3oitdyu": [ numEps: 2, model: "TS110E", inClusters: "0000,0004,0005,EF00",          joinName: "Moes ZigBee Dimmer Switche 2CH"],                     // https://community.hubitat.com/t/moes-dimmer-module-2ch/110512 
     "_TZ3210_k1msuvg6": [ numEps: 1, model: "TS110E", inClusters: "0004,0005,0003,0006,0008,EF00,0000", joinName: "Girier Zigbee 1-Gang Dimmer module"],           // https://community.hubitat.com/t/girier-tuya-zigbee-3-0-light-switch-module-smart-diy-breaker-1-2-3-4-gang-supports-2-way-control/104546/36?u=kkossev
     "GLEDOPTO":         [ numEps: 1, model: "GL-SD-001", inClusters: "0000,0003,0004,0005,0006,0008,1000", joinName: "Gledopto Triac Dimmer"],                     //
@@ -300,7 +302,8 @@ def config() { return modelConfigs[device.getDataValue("manufacturer")] }
                 [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0004,0005,EF00,0000", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_la2c2uo9", deviceJoinName: "Moes Zigbee 1-Gang Dimmer module"],        // not tested
                 [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0004,0005,EF00,0000", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_579lguh2", deviceJoinName: "Moes Zigbee 1-Gang Dimmer module"],        // not tested
                 [numEps: 2, profileId:"0104", endpointId:"01", inClusters:"0004,0005,EF00,0000", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_fjjbhx9d", deviceJoinName: "Moes Zigbee 2-Gang Dimmer module"],        // https://community.hubitat.com/t/tuya-moes-1-2-3-gang-dimmer/104596/5?u=kkossev 
-                [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0004,0005,EF00,0000", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_drs6j6m5", deviceJoinName: "Lifud Model LF-AAZ030-0750-42"]            // https://community.hubitat.com/t/tuya-moes-1-2-3-gang-dimmer/104596/25?u=kkossev
+                [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0004,0005,EF00,0000", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_drs6j6m5", deviceJoinName: "Lifud Model LF-AAZ030-0750-42"],            // https://community.hubitat.com/t/tuya-moes-1-2-3-gang-dimmer/104596/25?u=kkossev
+                [numEps: 1, profileId:"0104", endpointId:"01", inClusters:"0004,0005,EF00,0000", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_3p5ydos3", deviceJoinName: "BSEED Zigbee 1-Gang Dimmer module"],        // not tested
             ],
             deviceJoinName: "TS0601 Tuya Dimmer",
             capabilities  : ["SwitchLevel": true],
@@ -1221,6 +1224,9 @@ def levelToValue(BigDecimal level) {
 
 // converts Hubitat level 0..100 to device brightness level ( 0..255, 0..100 depending on the device profile)  
 def levelToValue(Integer level) {
+    if (level == 0) {
+        return 0    // skip the scaling to enable auto off!
+    }
     def mult = 1.0F
     if (isTS0601()) {// ? 1.0 : 2.55 
         mult = 1.0
@@ -1234,9 +1240,8 @@ def levelToValue(Integer level) {
     Integer minLevel100 = Math.round((settings.minLevel ?: DEFAULT_MIN_LEVEL) * mult)
     Integer maxLevel100 = Math.round((settings.maxLevel ?: DEFAULT_MAX_LEVEL) * mult)
     
-    //log.trace "mult=${mult}, minLevel100=${minLevel100}, maxLevel100=${maxLevel100}"
-    def reScaled =  rescale(level, 0, 100, minLevel, maxLevel100)
-    logDebug "levelToValue: level=${level} reScaled=${reScaled}"
+    def reScaled = scaleBetween(level,minLevel100, maxLevel100, 0, 100)
+    logTrace "levelToValue: level=${level} reScaled=${reScaled} (mult=${mult}, minLevel100=${minLevel100}, maxLevel100=${maxLevel100})"
     return reScaled
 }
 
@@ -1475,9 +1480,14 @@ def initialized() {
 Shared helper functions
 -----------------------------------------------------------------------------
 */
+import java.lang.Math;
 
 def rescale(value, fromLo, fromHi, toLo, toHi) {
     return Math.round((((value-fromLo)*(toHi-toLo))/(fromHi-fromLo)+toLo))
+}
+
+def scaleBetween(unscaledNum, minAllowed, maxAllowed, min, max) {
+      return Math.round(  (maxAllowed - minAllowed) * (unscaledNum - min) / (max - min) + minAllowed )
 }
 
 def intTo16bitUnsignedHex(value) {
@@ -1780,8 +1790,8 @@ def testRefresh() {
 }
 
 def testX( var ) {
-    //installed()
-    sendHealthStatusEventAll(var as String)
+    
+    log.warn "levelToValue(${var}) = ${levelToValue(safeToInt(var))}"
 }
 
 // https://developer.tuya.com/en/docs/iot/tuya-smart-dimmer-switch-single-phrase-input-without-neutral-line?id=K9ik6zvokodvn#subtitle-10-Private%20cluster 
