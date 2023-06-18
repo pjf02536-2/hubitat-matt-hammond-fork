@@ -60,20 +60,20 @@ ver 0.4.4  2023/04/23 kkossev      - added capability 'Health Check'; Lonsonho d
 ver 0.4.5  2023/05/17 kkossev      - removed obsolete deviceSimulation options; added _TZ3210_ngqk6jia fingerprint1-gang
 ver 0.4.6  2023/06/11 kkossev      - child devices creation critical bug fix.
 ver 0.5.0  2023/06/14 kkossev      - added trace logging; fixed healthStatus offline for TS0601 and Lonsonho 2nd gang; temporary disabled the initialize() command; changed _TZ3210_ngqk6jia to Lonsonho TS011E group; fixed TS0601 1st gang not working
-ver 0.5.1  2023/06/15 kkossev      - added TS110E _TZ3210_3mpwqzuu 2 gang; fixed minLevel bug scaling; added RTT measurement in the ping command; added rxCtr; _TZ3210_4ubylghk inClusters correction; TS110E_LONSONHO_DIMMER group model bug fix;
+ver 0.5.1  2023/06/15 kkossev      - added TS110E _TZ3210_3mpwqzuu 2 gang; fixed minLevel bug scaling; added RTT measurement in the ping command; added rxCtr, txCtr, switchCtr, leveCtr; _TZ3210_4ubylghk inClusters correction; TS110E_LONSONHO_DIMMER group model bug fix;
+ver 0.5.2  2023/06/18 kkossev      - (dev. branch) added digital/physical; 
 *
-*                                   TODO: TS0601 3 gangs - toggle() is not working for the 2nd and teh 3rd gang
+*                                   TODO: TS0601 3 gangs - toggle() is not working for the 2nd and the 3rd gang
 *                                   TODO: Enable the Initialize() button w/  Yes/No selection
 *                                   TODO: TS110E_GIRIER_DIMMER TS011E power_on_behavior_1, TS110E_switch_type ['toggle', 'state', 'momentary']) (TS110E_options - needsMagic())
 *                                   TODO: Tuya Fan Switch support
 *                                   TODO: add TS110E 'light_type', 'switch_type'
-*                                   TODO: 
 *                                   TODO: add startLevelChange/stopLevelChange (Gledopto)
 *
 */
 
-def version() { "0.5.1" }
-def timeStamp() {"2023/06/15 10:05 PM"}
+def version() { "0.5.2" }
+def timeStamp() {"2023/06/18 10:04 PM"}
 
 import groovy.transform.Field
 
@@ -109,7 +109,7 @@ metadata {
                 [name:"dpType",    type: "ENUM",   constraints: ["DP_TYPE_VALUE", "DP_TYPE_BOOL", "DP_TYPE_ENUM"], description: "DP data type"] 
             ]
             command "testRefresh", [[name: "see the live logs" ]]
-            command "test", [[name: "test", type: "STRING", description: "test", constraints: ["STRING"]]]
+            command "testParse", [[name: "test", type: "STRING", description: "test", constraints: ["STRING"]]]
             command "testX", [[name: "testX", type: "STRING", description: "testX", constraints: ["STRING"]]]
         }
         
@@ -372,7 +372,7 @@ def isTuyaBulb()           { return getDW().getModelGroup().contains("TS0505B_TU
 void parse(String description) {
     checkDriverVersion()
     if (state.stats != null) state.stats['rxCtr'] = (state.stats['rxCtr'] ?: 0) + 1 else state.stats=[:]
-    logTrace "parse: received raw description: ${description}"
+    logDebug "parse: received raw description: ${description}"
     if (isParent()) {
         def descMap = [:]
         try {
@@ -381,10 +381,14 @@ void parse(String description) {
         catch (e) {
             logWarn "exception ${e} caught while parsing description:  ${description}"
         }
-        logDebug "parse: received descMap: ${descMap}"
+        logTrace "parse: received descMap: ${descMap}"
         if (description.startsWith("catchall")) {
             logTrace "parse: catchall clusterId=${descMap?.clusterId} command=${descMap?.command} data=${descMap?.data}"
-            if (descMap?.clusterId == "EF00") {
+            if (descMap?.command == "0B") {
+                logDebug "parse: catchall received confirmation from clusterId=${descMap?.clusterId} for command=${descMap?.command} data=${descMap?.data}"
+                return
+            }
+            else if (descMap?.clusterId == "EF00") {
                 parseTuyaCluster(descMap)
             }
             else if(descMap?.clusterId == "0000") {
@@ -392,7 +396,7 @@ void parse(String description) {
                 descMap.remove('additionalAttrs')?.each { final Map map -> parseBasicCluster(descMap + map) }
             }
             else {
-                logWarn "uprocessed catchall:  ${description}"
+                logWarn "unprocessed catchall:  ${description}"
             }
             sendHealthStatusEventAll('online')
             unschedule('deviceCommandTimeout')            
@@ -758,13 +762,8 @@ Hub Action (cmd) generators - only return ArrayList<String> Zigbee commands to t
 def cmdRefresh(String childDni) {
     def endpointId = childDniToEndpointId(childDni)
     logDebug "cmdRefresh: (childDni=${childDni} endpointId=${endpointId})  isParent()=${isParent()}"
-    // changed 03/25/2023 - always try to refresh clusters 6 & 8, even for Tuya switches... do not return null!
-    /*
-    if (isTS0601()) {
-        logWarn "cmdRefresh NOT implemented for TS0601!"
-        return null
-    }
-    */
+    state.lastTx["cmdTime"] = new Date().getTime()
+
     if (isLonsonho() || isTuyaBulb()) {
         return [
             "he rattr 0x${device.deviceNetworkId} 0x${endpointId} 0x0006 0 {}",
@@ -807,6 +806,7 @@ def cmdSwitch(String childDni, onOff) {
     ArrayList<String> cmds = []
     def endpointId = childDniToEndpointId(childDni)
     logTrace "cmdSwitch: childDni=${childDni} onOff=${onOff} endpointId=${endpointId}"
+    state.lastTx["cmdTime"] = new Date().getTime()
     onOff = onOff ? "1" : "0"
     
     if (isTS0601()) {
@@ -827,13 +827,12 @@ def cmdSwitch(String childDni, onOff) {
 def cmdSetLevel(String childDni, value, duration) {
     def endpointId = childDniToEndpointId(childDni)
     value = value.toInteger()
-    //value = value > 255 ? 255 : value
     value = value < 1 ? 0 : value
 
     duration = (duration * 10).toInteger()
     def child = getChildByEndpointId(endpointId)
     logTrace "cmdSetLevel: child=${child} childDni=${childDni} value=${value} duration=${duration}"
-    
+    state.lastTx["cmdTime"] = new Date().getTime()
     ArrayList<String> cmdsTuya = []
     ArrayList<String> cmdTS011 = []
     
@@ -887,6 +886,7 @@ def cmdSetLevel(String childDni, value, duration) {
 def cmdPing(String childDni) {
     def endpointId = childDniToEndpointId(childDni)
     if (isTS0601()) endpointId = 1
+    state.lastTx["cmdTime"] = new Date().getTime()
     logDebug "cmdPing: (childDni=${childDni} endpointId=${endpointId})  isParent()=${isParent()}"
     return ["he rattr 0x${device.deviceNetworkId} 0x${endpointId} 0x0000 0x0001 {}", "delay 200",]
 }
@@ -1140,6 +1140,13 @@ private randomPacketId() {
 	return zigbee.convertToHexString(new Random().nextInt(65536), 4)
 }
 
+
+String getEventType()
+{
+    def timeElapsed = now().toInteger() - (state.lastTx["cmdTime"] ?: '0').toInteger()
+    return (timeElapsed <= MAX_PING_MILISECONDS) ? "digital" : "physical"
+}
+                
 /*
 -----------------------------------------------------------------------------
 Child only code
@@ -1147,16 +1154,18 @@ Child only code
 */
 
 def onSwitchState(value) {
+    if (state.stats != null) state.stats['switchCtr'] = (state.stats['switchCtr'] ?: 0) + 1 else state.stats=[:]
     def valueText = value == 0 ? "off" : "on"
-    logInfo "set ${valueText}"
-    sendEvent(name:"switch", value: valueText, descriptionText: "${device.displayName} set ${valueText}", unit: null)
+    logInfo "was turned ${valueText} [${getEventType()}]"
+    sendEvent(name:"switch", value: valueText, descriptionText: "${device.displayName} was turned ${valueText}", type: getEventType(), unit: null)
 }
 
 def onSwitchLevel(value) {
+    if (state.stats != null) state.stats['levelCtr'] = (state.stats['levelCtr'] ?: 0) + 1 else state.stats=[:]
     def level = valueToLevel(safeToInt(value))    // TODO - null pointer exception! https://community.hubitat.com/t/girier-tuya-zigbee-3-0-dimmable-1-gang-switch-w-neutral/112620/10?u=kkossev 
     logDebug "onSwitchLevel: Value=${value} level=${level} (value=${value})"
-    logInfo "set level ${level} %"
-    sendEvent(name:"level", value: level, descriptionText:"${device.displayName} set ${level}%", unit: "%")
+    logInfo "was set to ${level}% [${getEventType()}]"
+    sendEvent(name:"level", value: level, descriptionText:"${device.displayName} was set ${level}%", type: getEventType(), unit: "%")
 }
     
 /*
@@ -1373,8 +1382,8 @@ def resetStats() {
     state.lastRx = [:]
     state.lastTx = [:]
 //    state.health = [:]
-//    state.stats["rxCtr"] = 0
-//    state.stats["txCtr"] = 0
+    state.stats["rxCtr"] = 0
+    state.stats["txCtr"] = 0
 //    state.states["isDigital"] = false
 //    state.states["isRefresh"] = false
 //    state.health["offlineCtr"] = 0
@@ -1633,6 +1642,7 @@ void sendZigbeeCommands(ArrayList<String> cmd) {
     hubitat.device.HubMultiAction allActions = new hubitat.device.HubMultiAction()
     cmd.each {
             allActions.add(new hubitat.device.HubAction(it, hubitat.device.Protocol.ZIGBEE))
+            if (state.stats != null) state.stats['txCtr'] = (state.stats['txCtr'] ?: 0) + 1 else state.stats=[:]
     }
     sendHubCommand(allActions)
 }
@@ -1759,7 +1769,7 @@ private void sendHealthStatusEventAll(String status) {
 }
 
 private void scheduleCommandTimeoutCheck(int delay = COMMAND_TIMEOUT) {
-    logDebug "scheduleCommandTimeoutCheck: delay=${delay} isParent=${isParent()}"
+    logTrace "scheduleCommandTimeoutCheck: delay=${delay} isParent=${isParent()}"
     runIn(delay, 'deviceCommandTimeout', [overwrite: true, misfire: "ignore"])
 }
 
@@ -1792,16 +1802,10 @@ def tuyaTest( dpCommand, dpValue, dpTypeString ) {
     sendZigbeeCommands( sendTuyaCommand(dpCommand, dpType, dpValHex) )
 }
 
-def test(String description) {
-    /*
+def testParse(String description) {
     log.warn "test parsing : ${description}"
     parse( description)
-*/
-    def lvl = valueToLevel(safeToInt(description))
-    log.warn "valueToLevel: value ${description} -> level ${lvl}"
-    def val = levelToValue( lvl )
-    log.warn "levelToValue: level ${lvl} -> value ${val}"
-    
+    log.warn "--- end ---"
 }
 
 def moveToLevelTuya( level, delay) {
