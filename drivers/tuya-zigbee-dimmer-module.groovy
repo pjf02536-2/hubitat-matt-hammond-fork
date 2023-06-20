@@ -61,8 +61,13 @@ ver 0.4.5  2023/05/17 kkossev      - removed obsolete deviceSimulation options; 
 ver 0.4.6  2023/06/11 kkossev      - child devices creation critical bug fix.
 ver 0.5.0  2023/06/14 kkossev      - added trace logging; fixed healthStatus offline for TS0601 and Lonsonho 2nd gang; temporary disabled the initialize() command; changed _TZ3210_ngqk6jia to Lonsonho TS011E group; fixed TS0601 1st gang not working
 ver 0.5.1  2023/06/15 kkossev      - added TS110E _TZ3210_3mpwqzuu 2 gang; fixed minLevel bug scaling; added RTT measurement in the ping command; added rxCtr, txCtr, switchCtr, leveCtr; _TZ3210_4ubylghk inClusters correction; TS110E_LONSONHO_DIMMER group model bug fix;
-ver 0.5.2  2023/06/18 kkossev      - (dev. branch) added digital/physical; 
+ver 0.5.2  2023/06/19 kkossev      - (dev. branch) added digital/physical; checkDriverVersion fix; _TZ3210_ngqk6jia ping fix;
 *
+*                                   TODO: Lonsonho _TZ3210_pagajpog : healthStatus offline bug!
+*                                   TODO: clearStats toggle in Preferences
+*                                   TODO: Lonsonho _TZ3210_pagajpog : when momentarily push switch 1. It is like it doesn't recognize it as pressing the switch, but pressing it again can cause it to go into pairing mode. @user3633
+*                                   TODO: Girier _TZ3210_3mpwqzuu: physical switch not reflected in the driver @user5386
+*                                   TODO: Girier _TZ3210_3mpwqzuu: Every change in intensity through the dashboard, the lamp reaches the desired level and then lowers intensity until it is turned off, (for both channels) @user5386
 *                                   TODO: TS0601 3 gangs - toggle() is not working for the 2nd and the 3rd gang
 *                                   TODO: Enable the Initialize() button w/  Yes/No selection
 *                                   TODO: TS110E_GIRIER_DIMMER TS011E power_on_behavior_1, TS110E_switch_type ['toggle', 'state', 'momentary']) (TS110E_options - needsMagic())
@@ -73,7 +78,7 @@ ver 0.5.2  2023/06/18 kkossev      - (dev. branch) added digital/physical;
 */
 
 def version() { "0.5.2" }
-def timeStamp() {"2023/06/18 10:04 PM"}
+def timeStamp() {"2023/06/19 7:20 PM"}
 
 import groovy.transform.Field
 
@@ -103,6 +108,7 @@ metadata {
         //command "initialize", [[name: "Initialize the sensor after switching drivers.  \n\r   ***** Will load device default values! *****" ]]
         
         if (_DEBUG == true) {
+            command "init"
             command "tuyaTest", [
                 [name:"dpCommand", type: "STRING", description: "Tuya DP Command", constraints: ["STRING"]],
                 [name:"dpValue",   type: "STRING", description: "Tuya DP value", constraints: ["STRING"]],
@@ -143,7 +149,7 @@ metadata {
             
         }
         */
-        input (name: "advancedOptions", type: "bool", title: "Advanced Options", description: "<i>May not work for all device types!</i>", defaultValue: false)
+        input (name: "advancedOptions", type: "bool", title: "Advanced Options", description: "<i> </i>", defaultValue: false)
         if (advancedOptions == true) {
             input "traceEnable", "bool", title: "<b>Enable trace logging</b>", description: "<i>Even more detailed logging. Toggle it on if asked by the developer...</i>", required: false, defaultValue: false
             input (name: "forcedProfile", type: "enum", title: "<b>Device Profile</b>", description: "<i>Forcely change the Device Profile, if the model/manufacturer was not recognized automatically.<br>Warning! Manually setting a device profile may not always work!</i>", 
@@ -447,6 +453,7 @@ void parse(String description) {
                         logDebug "parse: IGNORING command Response for cluster ${descMap.clusterInt} command ${descMap?.command} attribute ${escMap?.attrId}"
                     }
                     else {
+                        logTrace "on/off  endpoint=${descMap?.endpoint} isFirst=${isFirst} this=${this} child=${child} value=${value}"
                         child?.onSwitchState(value)
                         if (isFirst && child != this) {
                             logTrace "parse: replicating switchState in parent"
@@ -533,10 +540,13 @@ void parseBasicCluster(final Map descMap) {
         case PING_ATTR_ID: // Using 0x01 read as a simple ping/pong mechanism
             logDebug "Tuya check-in message (attribute ${descMap.attrId} reported: ${descMap.value})"
             def now = new Date().getTime()
-            if (state.lastTx == null) state.lastTx = [:]
-            def timeRunning = now.toInteger() - (state.lastTx["pingTime"] ?: '0').toInteger()
+            if (this.state.lastTx == null) this.state.lastTx = [:]
+            def timeRunning = now.toInteger() - (this.state.lastTx["pingTime"] ?: '0').toInteger()
             if (timeRunning < MAX_PING_MILISECONDS) {
                 sendRttEvent()
+            }
+            else  {
+                logWarn "ignored PING_ATTR_ID, timeRunning=${timeRunning}"
             }
             break
         case FIRMWARE_VERSION_ID:
@@ -739,15 +749,19 @@ def setLevel(level, duration=0) {
 // sends Zigbee commands to ping the device
 def ping() {
     getDW().scheduleCommandTimeoutCheck()
-    state.lastTx["pingTime"] = new Date().getTime()
+    this.state.lastTx["pingTime"] = new Date().getTime()
+         ArrayList<String> cmds = cmdPing(this.device.deviceNetworkId)
+        sendZigbeeCommands(cmds)   
+    /*
     if (isParent()) {
         logDebug "ping: (cmd) parent ${indexToChildDni(0)}"
         ArrayList<String> cmds = cmdPing(indexToChildDni(0))
         sendZigbeeCommands(cmds)
     } else {
         logDebug "ping: (doActions) child ${device.deviceNetworkId}"
-        parent?.doActions( parent?.cmdPing(device.deviceNetworkId) )
+        parent.doActions( parent.cmdPing(device.deviceNetworkId) )
     }
+*/
 }
 
 
@@ -884,9 +898,8 @@ def cmdSetLevel(String childDni, value, duration) {
 
 // returns Zigbee commands to ping the device
 def cmdPing(String childDni) {
-    def endpointId = childDniToEndpointId(childDni)
-    if (isTS0601()) endpointId = 1
-    state.lastTx["cmdTime"] = new Date().getTime()
+    def endpointId = this.state.destinationEP
+    this.state.lastTx["cmdTime"] = new Date().getTime()
     logDebug "cmdPing: (childDni=${childDni} endpointId=${endpointId})  isParent()=${isParent()}"
     return ["he rattr 0x${device.deviceNetworkId} 0x${endpointId} 0x0000 0x0001 {}", "delay 200",]
 }
@@ -1203,14 +1216,15 @@ def indexToChildDni(i) {
 
 def childDniToEndpointId(childDni) {
     def match = childDni =~ childDniPattern
-    //log.trace "childDniToEndpointId: childDni=${childDni} childDniPattern=${childDniPattern}" 
-    //log.trace " match=${match}"
+    logTrace "childDniToEndpointId: childDni=${childDni} childDniPattern=${childDniPattern} match[0][1]=${match[0][1]} match[0][2]=${match[0][2]} device.deviceNetworkId=${device.deviceNetworkId} match=${match}" 
     if (match) {
-        if (match[0][1] == device.deviceNetworkId) {
+//        if (match[0][1] == device.deviceNetworkId) {
             return match[0][2]
-        }
+ //       }
     }
-    return null
+    logWarn "childDniToEndpointId: childDni=${childDni} childDniPattern=${childDniPattern} match[0][1]=${match[0][1]} match[0][2]=${match[0][2]} device.deviceNetworkId=${device.deviceNetworkId} match=${match}" 
+    //return null
+    match[0][2]
 }
 
 def childDnisToEndpointIds(List<String> childDnis) {
@@ -1223,14 +1237,21 @@ def childDnisToEndpointIds(List<String> childDnis) {
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 def getChildByEndpointId(endpointId) {
-    //log.trace "getChildByEndpointId endpointId=${endpointId}"
+    logTrace "getChildByEndpointId endpointId=${endpointId}"
     if (endpointId == null) return this
     if (endpointIdToIndex(endpointId) == 0 && getChildDevices().size() == 0) {
-        //log.trace "getChildByEndpointId returning this: ${this}"
+        logTrace "getChildByEndpointId returning this: ${this}"
         return this
     } else {
-        //log.trace "getChildByEndpointId returning getChildDevice: ${getChildDevice(endpointIdToChildDni(endpointId))}"
-        return getChildDevice(endpointIdToChildDni(endpointId))
+        def cd = getChildDevice(endpointIdToChildDni(endpointId))
+        logTrace "getChildByEndpointId(${endpointId}) returning getChildDevice: ${cd} (childDNI=${endpointIdToChildDni(endpointId)})"
+        if (cd == null) {
+            log.warn "<b>can not find the child device! Remove the device and pair it again to HE!</b>"
+            // try obtaining the child device from the list ... in case the parent DNI was changed!
+            cd =  getChildDevices()[(endpointId as int) -1]
+            log.warn "cd=${cd}"
+        }
+        return cd
     }
 }
 
@@ -1336,6 +1357,10 @@ def installed() {
     initialized()    
 }
 
+def init() {
+    installed()
+}
+
 // called every time the device is paired to the HUB (both as new or as an existing device)
 def configure() {
     logDebug "<b>configure()</b> ..."
@@ -1363,12 +1388,12 @@ def initialize() {
 def setDestinationEP() {
     def ep = device.getEndpointId()
     if (ep != null && ep != 'F2') {
-        state.destinationEP = ep
+        this.state.destinationEP = ep
         logDebug "setDestinationEP() destinationEP = ${state.destinationEP}"
     }
     else {
         logWarn "setDestinationEP() Destination End Point not found or invalid(${ep}), activating the F2 bug patch!"
-        state.destinationEP = "01"    // fallback EP
+        this.state.destinationEP = "01"    // fallback EP
     }      
 }
 
@@ -1404,6 +1429,8 @@ void initializeVars( boolean fullInit = false ) {
 //    if (state.states == null) { state.states = [:] }
     if (state.lastRx == null) { state.lastRx = [:] }
     if (state.lastTx == null) { state.lastTx = [:] }
+    if (state.lastTx["cmdTime"] == null)  state.lastTx["cmdTime"] = now()
+    if (this.state.lastTx["pingTime"] == null)  this.state.lastTx["pingTime"] = now()
 //    if (state.health == null) { state.health = [:] }  
     
     if (fullInit == true || state.deviceProfile == null) {
@@ -1415,6 +1442,7 @@ void initializeVars( boolean fullInit = false ) {
     if (fullInit == true || settings.txtEnable == null) device.updateSetting("txtEnable", true)
     if (fullInit == true || settings?.minLevel == null) device.updateSetting("minLevel", [value:DEFAULT_MIN_LEVEL, type:"number"]) 
     if (fullInit == true || settings?.maxLevel == null) device.updateSetting("maxLevel", [value:DEFAULT_MAX_LEVEL, type:"number"]) 
+    if (fullInit == true || settings?.healthCheckInterval == null) device.updateSetting('healthCheckInterval', [value: HealthcheckIntervalOpts.defaultValue.toString(), type: 'enum'])
 }
 
 // will be called when user selects Save Preferences
@@ -1508,7 +1536,7 @@ def updated() {
     //return initialized()
 }
 
-// custom initialization method, called from configure()
+// custom initialization method, called from installed()
 def initialized() {
     logDebug "<b>initialized()</b> ... ${getDeviceInfo()}"
     ArrayList<String> cmds = []
@@ -1647,14 +1675,16 @@ void sendZigbeeCommands(ArrayList<String> cmd) {
     sendHubCommand(allActions)
 }
 
-def driverVersionAndTimeStamp() {version() + ' ' + timeStamp() + ((debug==true) ? " debug version!" : " ")}
+def driverVersionAndTimeStamp() {version() + ' ' + timeStamp() + ((_DEBUG==true) ? " debug version!" : " ")}
 
 def checkDriverVersion() {
-    if (state.driverVersion != null && driverVersionAndTimeStamp() == state.driverVersion) {
-        // no driver version change
-    }
-    else {
-        logDebug "${device.displayName} updating the settings from the current driver version ${state.driverVersion} to the new version ${driverVersionAndTimeStamp()}"
+    if (state.driverVersion == null || driverVersionAndTimeStamp() != state.driverVersion) {
+        logInfo "updating the settings from the current driver version ${state.driverVersion} to the new version ${driverVersionAndTimeStamp()}"
+        initializeVars(fullInit = false)
+        if (state.lastRx == null || state.stats == null || state.lastTx == null) {
+            resetStats()
+        }
+        scheduleDeviceHealthCheck()        
         state.driverVersion = driverVersionAndTimeStamp()
     }
 }
@@ -1738,16 +1768,29 @@ def setDeviceNameAndProfile( model=null, manufacturer=null) {
  */
 void sendRttEvent( String value=null) {
     def now = new Date().getTime()
-    def timeRunning = now.toInteger() - (state.lastTx["pingTime"] ?: now).toInteger()
+    def timeRunning = now.toInteger() - (this.state.lastTx["pingTime"] ?: now()).toInteger()
+    if (timeRunning <= 0) return
     def descriptionText = "Round-trip time is ${timeRunning} (ms)"
     if (value == null) {
-        logInfo "${descriptionText}"
-        this.sendEvent(name: "rtt", value: timeRunning, descriptionText: descriptionText, unit: "ms", isDigital: true)    
+    	def cd = getChildDevices()
+        cd.each { child ->
+            logTrace "child=${child}"
+            child?.sendEvent(name: 'rtt', value: timeRunning, descriptionText: descriptionText, unit: "ms", type: "physical")
+            child?.logInfo "${descriptionText}"
+        }   
+        this.logInfo "${descriptionText}"
+        this.sendEvent(name: "rtt", value: timeRunning, descriptionText: descriptionText, unit: "ms", type: "physical")    
     }
     else {
+    	def cd = getChildDevices()
+        cd.each { child ->
+            logTrace "child=${child}"
+            child?.sendEvent(name: 'rtt', value: value, descriptionText: descriptionText, unit: "ms", type: "physical")
+            child?.logInfo "${descriptionText}"
+        }   
         descriptionText = "Round-trip time is ${value}"
-        logInfo "${descriptionText}"
-        this.sendEvent(name: "rtt", value: value, descriptionText: descriptionText, isDigital: true)    
+        this.logInfo "${descriptionText}"
+        this.sendEvent(name: "rtt", value: value, descriptionText: descriptionText, unit: "ms",type: "physical")    
     }
 }
 
@@ -1777,6 +1820,14 @@ private void scheduleCommandTimeoutCheck(int delay = COMMAND_TIMEOUT) {
 void deviceCommandTimeout() {
     logWarn 'no response received (device offline?)'
     sendHealthStatusEventAll('offline')
+}
+
+private void scheduleDeviceHealthCheck() {
+    int interval = (settings.healthCheckInterval as Integer) ?: HealthcheckIntervalOpts.defaultValue
+    if (interval > 0) {
+        log.info "scheduling health check every ${interval} minutes"
+        scheduleDeviceHealthCheck(interval)
+    }
 }
 
 private void scheduleDeviceHealthCheck(int intervalMins) {
@@ -1871,7 +1922,14 @@ def testRefresh() {
 
 def testX( var ) {
     
-    log.warn "levelToValue(${var}) = ${levelToValue(safeToInt(var))}"
+def parentDeviceId = parent?.deviceNetworkId.split("-")[0]
+if (parentDeviceId) {
+    log.debug "Parent device DNI: ${parentDeviceId}"
+} else {
+    log.debug "No parent device found."
+}
+
+
 }
 
 // https://developer.tuya.com/en/docs/iot/tuya-smart-dimmer-switch-single-phrase-input-without-neutral-line?id=K9ik6zvokodvn#subtitle-10-Private%20cluster 
