@@ -74,11 +74,12 @@ ver 0.6.0  2023/07/30 kkossev      - child devices ping(), toggle(), physical/di
 *                                   TODO: Tuya Fan Switch support
 *                                   TODO: add TS110E 'light_type', 'switch_type'
 *                                   TODO: add startLevelChange/stopLevelChange (Gledopto)
+ver 0.6.01  2023/08/21 pjf02536-2    added _TZE200_9i9dt8is TS110E Moes ZigBee Dimmer Module Switch 1CH"],                     
 *
 */
 
-def version() { "0.6.0" }
-def timeStamp() {"2023/07/30 11:43 PM"}
+def version() { "0.6.01" }
+def timeStamp() {"2023/08/21 04:21 PM"}
 
 @Field static final Boolean _DEBUG = false
 
@@ -225,6 +226,7 @@ metadata {
     "_TZE200_3p5ydos3": [ numEps: 1, model: "TS0601", inClusters: "0004,0005,EF00,0000",          joinName: "BSEED Zigbee Dimmer" ],                               // https://www.bseed.com/collections/zigbee-series/products/bseed-eu-russia-new-zigbee-touch-wifi-light-dimmer-smart-switch
     "_TZE200_e3oitdyu": [ numEps: 2, model: "TS110E", inClusters: "0000,0004,0005,EF00",          joinName: "Moes ZigBee Dimmer Switche 2CH"],                     // https://community.hubitat.com/t/moes-dimmer-module-2ch/110512 
     "_TZ3210_k1msuvg6": [ numEps: 1, model: "TS110E", inClusters: "0004,0005,0003,0006,0008,EF00,0000", joinName: "Girier Zigbee 1-Gang Dimmer module"],           // https://community.hubitat.com/t/girier-tuya-zigbee-3-0-light-switch-module-smart-diy-breaker-1-2-3-4-gang-supports-2-way-control/104546/36?u=kkossev
+    "_TZE200_9i9dt8is": [ numEps: 2, model: "TS110E", inClusters: "0000,0004,0005,EF00",          joinName: "Moes ZigBee Dimmer Switch 1CH"],                     // https://community.hubitat.com/t/moes-dimmer-module-2ch/110512 
     "GLEDOPTO":         [ numEps: 1, model: "GL-SD-001", inClusters: "0000,0003,0004,0005,0006,0008,1000", joinName: "Gledopto Triac Dimmer"],                     //
     "_TZ3210_pagajpog": [ numEps: 2, model: "TS110E", inClusters: "0005,0004,0006,0008,E001,0000", joinName: "Lonsonho Tuya Smart Zigbee Dimmer"],                 // https://community.hubitat.com/t/release-tuya-lonsonho-1-gang-and-2-gang-zigbee-dimmer-module-driver/60372/76?u=kkossev
     "_TZ3210_4ubylghk": [ numEps: 2, model: "TS110E", inClusters: "0004,0005,0006,0008,0300,EF00,0000", joinName: "Lonsonho Tuya Smart Zigbee Dimmer"],            // https://community.hubitat.com/t/driver-support-for-tuya-dimmer-module-model-ts110e-manufacturer-tz3210-4ubylghk/116077?u=kkossev
@@ -2041,10 +2043,10 @@ def testX( var ) {
 /*
 ID	    Name	                        Data type	    Range	        Defualt value
 0xFC00	Level control max min	        uint16 -0x21    0x0000 - 0xffff	0x01ff
-0xFC02	Level control bulb type	        uint8 -0x20	    0x00–0xFF	    0x00
-0xFC03	Level control scr state	        uint8 -0x20	    0x00–0xFF	    0x01
-0xFC04	Level control current percentage uint8 -0x20	0x00–0xFF	    0x01
-0xFC05	Level control min percentage	uint8 -0x20	    0x00–0xFF	    0x01
+0xFC02	Level control bulb type	        uint8 -0x20	    0x00Â–0xFF	    0x00
+0xFC03	Level control scr state	        uint8 -0x20	    0x00Â–0xFF	    0x01
+0xFC04	Level control current percentage uint8 -0x20	0x00Â–0xFF	    0x01
+0xFC05	Level control min percentage	uint8 -0x20	    0x00Â–0xFF	    0x01
 */
 
 
